@@ -1,0 +1,1 @@
+- [Drizzle version pinning](drizzle-zod-compat.md) — drizzle-zod can break at runtime if its version drifts from drizzle-orm; prefer hand-written zod schemas for simple CRUD to avoid the coupling entirely.
