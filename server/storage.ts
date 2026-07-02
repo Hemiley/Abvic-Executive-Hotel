@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   receptionists,
   shifts,
@@ -24,7 +24,9 @@ import {
   type UpdateReceptionist,
   type UpdateHotelSettings,
 } from "@shared/schema";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "@shared/schema";
 
 export const storage = {
   // Receptionists
@@ -181,6 +183,92 @@ export const storage = {
   },
 
   // Reservations
+
+  /**
+   * Atomically checks room availability and creates a reservation within a
+   * single transaction using SELECT … FOR UPDATE to prevent double-booking.
+   * Throws if the room is not available.
+   */
+  async createBookingTransactional(data: {
+    guestData: {
+      fullName: string;
+      phone: string;
+      email?: string;
+      nationality?: string;
+      idType?: string;
+      idNumber?: string;
+      address?: string;
+      emergencyContact?: string;
+    };
+    roomId: string;
+    checkInDate: string;
+    checkOutDate: string;
+    numGuests: number;
+    specialRequests?: string;
+    status: string;
+    source: string;
+    receptionistId: string;
+    shiftId?: string;
+  }): Promise<{ reservation: Reservation; guest: Guest; room: Room }> {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const txDb = drizzle(client, { schema });
+
+      // Lock the room row to prevent concurrent bookings
+      const roomRows = await txDb
+        .select()
+        .from(rooms)
+        .where(eq(rooms.id, data.roomId))
+        .for("update");
+      const room = roomRows[0];
+      if (!room) {
+        await client.query("ROLLBACK");
+        throw Object.assign(new Error("Room not found"), { statusCode: 404 });
+      }
+      if (room.status !== "available") {
+        await client.query("ROLLBACK");
+        throw Object.assign(new Error("Room is not available"), { statusCode: 409 });
+      }
+
+      // Create guest
+      const [guest] = await txDb.insert(guests).values(data.guestData).returning();
+
+      // Create reservation
+      const [reservation] = await txDb
+        .insert(reservations)
+        .values({
+          guestId: guest.id,
+          roomId: data.roomId,
+          checkInDate: data.checkInDate,
+          checkOutDate: data.checkOutDate,
+          numGuests: data.numGuests,
+          specialRequests: data.specialRequests,
+          status: data.status,
+          source: data.source,
+          receptionistId: data.receptionistId,
+          shiftId: data.shiftId,
+        })
+        .returning();
+
+      // Update room status atomically
+      const newRoomStatus = data.source === "walk_in" ? "occupied" : "reserved";
+      const [updatedRoom] = await txDb
+        .update(rooms)
+        .set({ status: newRoomStatus })
+        .where(eq(rooms.id, data.roomId))
+        .returning();
+
+      await client.query("COMMIT");
+      return { reservation, guest, room: updatedRoom };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
   async createReservation(data: {
     guestId: string;
     roomId: string;

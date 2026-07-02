@@ -15,13 +15,20 @@ export async function seedAdmin() {
       role: "admin",
     });
 
-    console.log("============================================");
-    console.log(" Super Admin account created");
-    console.log(` Username: ${username}`);
-    console.log(` Password: ${password}`);
-    console.log(" Login at: /login");
-    console.log(" Please save these credentials now.");
-    console.log("============================================");
+    // Only print credentials to stdout on first boot (dev/staging). In
+    // production set ADMIN_INITIAL_PASSWORD via an environment secret so
+    // the plaintext password never appears in logs.
+    if (process.env.NODE_ENV !== "production") {
+      console.log("============================================");
+      console.log(" Super Admin account created");
+      console.log(` Username: ${username}`);
+      console.log(` Password: ${password}`);
+      console.log(" Login at: /login");
+      console.log(" Please save these credentials now.");
+      console.log("============================================");
+    } else {
+      console.log("Super Admin account created. Retrieve credentials via the environment secrets you configured.");
+    }
 
     const receptionistPassword = process.env.RECEPTIONIST_INITIAL_PASSWORD || nanoid(12);
     const receptionistHash = await bcrypt.hash(receptionistPassword, 10);
@@ -31,11 +38,13 @@ export async function seedAdmin() {
       fullName: "Front Desk Receptionist",
       role: "receptionist",
     });
-    console.log("============================================");
-    console.log(" Receptionist account created");
-    console.log(" Username: receptionist");
-    console.log(` Password: ${receptionistPassword}`);
-    console.log("============================================");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("============================================");
+      console.log(" Receptionist account created");
+      console.log(" Username: receptionist");
+      console.log(` Password: ${receptionistPassword}`);
+      console.log("============================================");
+    }
   }
 
   const rooms = await storage.getRooms();

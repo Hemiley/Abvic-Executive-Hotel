@@ -281,43 +281,43 @@ export function registerRoutes(app: Express) {
   });
 
   // ---------- Bookings / Reservations ----------
-  app.post("/api/bookings", requireAuth, async (req, res) => {
+  app.post("/api/bookings", requireAuth, async (req, res, next) => {
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid booking data" });
     const { guest, roomId, checkInDate, checkOutDate, numGuests, specialRequests, source } = parsed.data;
 
-    const room = await storage.getRoomById(roomId);
-    if (!room) return res.status(404).json({ message: "Room not found" });
-    if (room.status !== "available") return res.status(409).json({ message: "Room is not available" });
-
-    const guestRecord = await storage.createGuest({
-      fullName: guest.fullName,
-      phone: guest.phone,
-      email: guest.email || undefined,
-      nationality: guest.nationality,
-      idType: guest.idType,
-      idNumber: guest.idNumber,
-      address: guest.address,
-      emergencyContact: guest.emergencyContact,
-    });
-
     const shift = await storage.getActiveShiftForReceptionist(req.session.receptionistId!);
     const status = source === "walk_in" ? "checked_in" : "pending";
 
-    const reservation = await storage.createReservation({
-      guestId: guestRecord.id,
-      roomId,
-      checkInDate,
-      checkOutDate,
-      numGuests,
-      specialRequests,
-      status,
-      source,
-      receptionistId: req.session.receptionistId!,
-      shiftId: shift?.id,
-    });
+    let result: { reservation: any; guest: any; room: any };
+    try {
+      result = await storage.createBookingTransactional({
+        guestData: {
+          fullName: guest.fullName,
+          phone: guest.phone,
+          email: guest.email || undefined,
+          nationality: guest.nationality,
+          idType: guest.idType,
+          idNumber: guest.idNumber,
+          address: guest.address,
+          emergencyContact: guest.emergencyContact,
+        },
+        roomId,
+        checkInDate,
+        checkOutDate,
+        numGuests,
+        specialRequests,
+        status,
+        source,
+        receptionistId: req.session.receptionistId!,
+        shiftId: shift?.id,
+      });
+    } catch (err: any) {
+      if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+      return next(err);
+    }
 
-    await storage.setRoomStatus(roomId, source === "walk_in" ? "occupied" : "reserved");
+    const { reservation, guest: guestRecord, room } = result;
 
     if (shift) {
       await storage.incrementShiftStats(shift.id, { guestsServed: 1, roomsBooked: 1 });

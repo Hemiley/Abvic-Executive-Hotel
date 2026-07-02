@@ -10,6 +10,16 @@ app.use(express.json({ limit: "5mb" }));
 
 const PgSession = connectPgSimple(session);
 
+const isProd = process.env.NODE_ENV === "production";
+
+if (isProd && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be set in production");
+}
+
+if (isProd) {
+  app.set("trust proxy", 1);
+}
+
 app.use(
   session({
     store: new PgSession({
@@ -22,13 +32,21 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false,
+      secure: isProd,
+      sameSite: "lax",
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   })
 );
 
 registerRoutes(app);
+
+// Global error handler — catches unhandled async errors forwarded via next(err)
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error("Unhandled error:", err);
+  const status = err.statusCode ?? err.status ?? 500;
+  res.status(status).json({ message: err.message ?? "Internal server error" });
+});
 
 const port = 5000;
 
