@@ -204,14 +204,18 @@ h2 {
 }
 
 .notif-dropdown {
-  position: absolute;
-  right: 0;
-  top: 40px;
-  width: 300px;
-  max-height: 360px;
+  position: fixed;
+  right: 16px;
+  top: 64px;
+  width: 320px;
+  max-height: 420px;
   overflow-y: auto;
-  z-index: 20;
+  z-index: 1000;
   padding: 8px;
+  background: #1a1f2e;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
 .notif-header {
