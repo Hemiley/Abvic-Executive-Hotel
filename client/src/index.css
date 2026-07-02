@@ -193,6 +193,22 @@ h2 {
   isolation: isolate;
 }
 
+/* Sidebar variant — full-width like a nav-link */
+.sidebar-notif-wrap {
+  width: 100%;
+}
+
+.notif-nav-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  position: relative;
+  color: inherit;
+  font: inherit;
+}
+
 .notif-badge {
   position: absolute;
   top: -2px;
@@ -203,6 +219,12 @@ h2 {
   border-radius: 999px;
   padding: 1px 5px;
   pointer-events: none;
+}
+
+/* Badge inside the sidebar nav button — keep it right-aligned */
+.sidebar-notif-badge {
+  position: static;
+  margin-left: auto;
 }
 
 .notif-dropdown {
@@ -218,8 +240,20 @@ h2 {
   border: 1px solid rgba(124, 139, 255, 0.25);
   border-radius: 16px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.04);
-  /* Animate in */
   animation: notifSlideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Sidebar variant — panel opens to the RIGHT of the sidebar */
+.sidebar-notif-dropdown {
+  left: calc(100% + 8px);
+  right: auto;
+  top: 0;
+  animation: notifSlideInRight 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes notifSlideInRight {
+  from { opacity: 0; transform: translateX(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 [data-theme="light"] .notif-dropdown {

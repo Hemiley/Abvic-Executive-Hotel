@@ -81,6 +81,51 @@ export default function Layout({ children }: { children: ReactNode }) {
               {item.label}
             </NavLink>
           ))}
+
+          {/* Notifications — sidebar entry below Hotel Settings */}
+          <div className="notif-wrap sidebar-notif-wrap" ref={notifRef}>
+            <button
+              className="nav-link notif-nav-btn"
+              onClick={() => setShowNotifs((s) => !s)}
+              aria-label="Notifications"
+            >
+              <span className="nav-icon">🔔</span>
+              Notifications
+              {unread > 0 && <span className="notif-badge sidebar-notif-badge">{unread}</span>}
+            </button>
+
+            {showNotifs && (
+              <div className="notif-dropdown sidebar-notif-dropdown">
+                <div className="notif-header">
+                  <span>Notifications</span>
+                  {unread > 0 && (
+                    <span className="notif-header-badge">{unread} unread</span>
+                  )}
+                </div>
+                {notifications.length === 0 && (
+                  <div className="notif-empty">No notifications yet</div>
+                )}
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    className={`notif-item ${n.read ? "" : "unread"}`}
+                    onClick={() =>
+                      api.markNotificationRead(n.id).then(() =>
+                        setNotifications((prev) =>
+                          prev.map((p) => (p.id === n.id ? { ...p, read: true } : p))
+                        )
+                      )
+                    }
+                  >
+                    <div className="notif-msg">{n.message}</div>
+                    <div className="notif-time">
+                      {new Date(n.createdAt).toLocaleTimeString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
         <div className="shift-pill">
           <span className={`dot ${shift ? "dot-active" : "dot-inactive"}`} />
@@ -95,50 +140,6 @@ export default function Layout({ children }: { children: ReactNode }) {
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "☀️" : "🌙"}
             </button>
-
-            {/* Notification bell */}
-            <div className="notif-wrap" ref={notifRef}>
-              <button
-                className="icon-btn"
-                onClick={() => setShowNotifs((s) => !s)}
-                aria-label="Notifications"
-              >
-                🔔
-                {unread > 0 && <span className="notif-badge">{unread}</span>}
-              </button>
-
-              {showNotifs && (
-                <div className="notif-dropdown">
-                  <div className="notif-header">
-                    <span>Notifications</span>
-                    {unread > 0 && (
-                      <span className="notif-header-badge">{unread} unread</span>
-                    )}
-                  </div>
-                  {notifications.length === 0 && (
-                    <div className="notif-empty">No notifications yet</div>
-                  )}
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      className={`notif-item ${n.read ? "" : "unread"}`}
-                      onClick={() =>
-                        api.markNotificationRead(n.id).then(() =>
-                          setNotifications((prev) =>
-                            prev.map((p) => (p.id === n.id ? { ...p, read: true } : p))
-                          )
-                        )
-                      }
-                    >
-                      <div className="notif-msg">{n.message}</div>
-                      <div className="notif-time">
-                        {new Date(n.createdAt).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
             <div className="user-chip">
               <div className="avatar">{user?.fullName?.charAt(0) || "R"}</div>
