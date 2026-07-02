@@ -779,6 +779,203 @@ select {
   max-width: 520px;
 }
 
+/* Settings page tabs */
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+  background: rgba(124, 139, 255, 0.12);
+  color: var(--text);
+}
+
+.settings-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.settings-card {
+  max-width: 680px;
+  padding: 32px;
+}
+
+.settings-section-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.field-label-sm {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+/* Background preset swatches */
+.bg-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.bg-preset-swatch {
+  position: relative;
+  height: 72px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+}
+
+.bg-preset-swatch:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.bg-preset-swatch.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.bg-preset-check {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 14px;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.bg-preset-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  text-align: center;
+}
+
+/* Divider */
+.bg-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bg-divider::before,
+.bg-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--glass-border);
+}
+
+/* Custom bg upload */
+.custom-bg-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.custom-bg-preview {
+  width: 120px;
+  height: 72px;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--glass-border);
+}
+
+/* Live preview strip */
+.bg-live-preview {
+  margin-top: 20px;
+  height: 80px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+}
+
+.bg-live-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.35);
+  padding: 4px 12px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+/* Shortcut cards */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 600px) {
+  .shortcut-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shortcut-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shortcut-card p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.shortcut-icon {
+  font-size: 28px;
+}
+
+.shortcut-tip {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(124, 139, 255, 0.08);
+  border: 1px solid var(--glass-border);
+}
+
 .logo-preview {
   width: 88px;
   height: 88px;

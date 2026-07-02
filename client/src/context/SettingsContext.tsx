@@ -24,6 +24,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Apply custom background whenever settings change
+  useEffect(() => {
+    if (settings?.backgroundStyle) {
+      document.body.style.background = settings.backgroundStyle;
+    } else {
+      document.body.style.background = "";
+    }
+  }, [settings?.backgroundStyle]);
+
   useEffect(() => {
     refresh();
   }, []);

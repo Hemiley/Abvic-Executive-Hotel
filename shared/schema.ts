@@ -110,6 +110,7 @@ export const hotelSettings = pgTable("hotel_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   hotelName: text("hotel_name").notNull().default("Grand Hotel"),
   logoUrl: text("logo_url"),
+  backgroundStyle: text("background_style"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -188,6 +189,7 @@ export const createReceptionistSchema = z.object({
 export const updateHotelSettingsSchema = z.object({
   hotelName: z.string().min(1).optional(),
   logoUrl: z.string().optional(),
+  backgroundStyle: z.string().optional(),
 });
 
 export const updateReceptionistSchema = z.object({

@@ -101,6 +101,7 @@ export type HotelSettings = {
   id: string;
   hotelName: string;
   logoUrl: string | null;
+  backgroundStyle: string | null;
   updatedAt: string;
 };
 
@@ -184,7 +185,7 @@ export const api = {
   ) => request<Staff>(`/api/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getSettings: () => request<HotelSettings>("/api/settings"),
-  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string }>) =>
+  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string }>) =>
     request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
