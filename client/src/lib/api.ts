@@ -86,6 +86,17 @@ export type AuditLog = {
   createdAt: string;
 };
 
+export type Staff = {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string | null;
+  role: "receptionist" | "supervisor" | "admin";
+  avatarUrl: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
 export type DashboardSummary = {
   shiftActive: boolean;
   shift: Shift | null;
@@ -121,13 +132,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   login: (username: string, password: string) =>
-    request<{ id: string; username: string; fullName: string; role: string; shift: Shift | null }>(
+    request<{ id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null }>(
       "/api/auth/login",
       { method: "POST", body: JSON.stringify({ username, password }) }
     ),
   logout: () => request("/api/auth/logout", { method: "POST" }),
   me: () =>
-    request<{ id: string; username: string; fullName: string; role: string; shift: Shift | null }>("/api/auth/me"),
+    request<{ id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null }>(
+      "/api/auth/me"
+    ),
 
   startShift: (openingBalance: number) =>
     request<Shift>("/api/shifts/start", { method: "POST", body: JSON.stringify({ openingBalance }) }),
@@ -148,6 +161,20 @@ export const api = {
 
   createPayment: (data: any) => request<Payment>("/api/payments", { method: "POST", body: JSON.stringify(data) }),
   getPayments: () => request<Payment[]>("/api/payments"),
+
+  getStaff: () => request<Staff[]>("/api/staff"),
+  createStaff: (data: {
+    username: string;
+    password: string;
+    fullName: string;
+    email?: string;
+    role: string;
+    avatarUrl?: string;
+  }) => request<Staff>("/api/staff", { method: "POST", body: JSON.stringify(data) }),
+  updateStaff: (
+    id: string,
+    data: Partial<{ fullName: string; email: string; role: string; avatarUrl: string; active: boolean; password: string }>
+  ) => request<Staff>(`/api/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),

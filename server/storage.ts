@@ -18,6 +18,8 @@ import {
   type Notification,
   type InsertRoom,
   type UpdateRoom,
+  type CreateReceptionist,
+  type UpdateReceptionist,
 } from "@shared/schema";
 import { eq, desc, and, isNull } from "drizzle-orm";
 
@@ -39,9 +41,23 @@ export const storage = {
     username: string;
     passwordHash: string;
     fullName: string;
+    email?: string;
     role?: string;
+    avatarUrl?: string;
   }): Promise<Receptionist> {
     const [r] = await db.insert(receptionists).values(data).returning();
+    return r;
+  },
+  async getReceptionists(): Promise<Receptionist[]> {
+    return db.select().from(receptionists).orderBy(receptionists.fullName);
+  },
+  async updateReceptionist(
+    id: string,
+    data: Partial<UpdateReceptionist> & { passwordHash?: string }
+  ): Promise<Receptionist | undefined> {
+    const payload: any = { ...data };
+    delete payload.password;
+    const [r] = await db.update(receptionists).set(payload).where(eq(receptionists.id, id)).returning();
     return r;
   },
 

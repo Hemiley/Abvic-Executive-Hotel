@@ -10,6 +10,8 @@ import {
   createBookingSchema,
   updateReservationSchema,
   createPaymentSchema,
+  createReceptionistSchema,
+  updateReceptionistSchema,
 } from "@shared/schema";
 
 declare module "express-session" {
@@ -23,6 +25,16 @@ declare module "express-session" {
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) {
     return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.receptionistId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  if (req.session.role !== "admin") {
+    return res.status(403).json({ message: "Admin access required" });
   }
   next();
 }
@@ -86,7 +98,91 @@ export function registerRoutes(app: Express) {
       username: receptionist.username,
       fullName: receptionist.fullName,
       role: receptionist.role,
+      avatarUrl: receptionist.avatarUrl,
       shift: shift || null,
+    });
+  });
+
+  // ---------- Staff (admin only) ----------
+  app.get("/api/staff", requireAdmin, async (_req, res) => {
+    const staff = await storage.getReceptionists();
+    res.json(
+      staff.map((s) => ({
+        id: s.id,
+        username: s.username,
+        fullName: s.fullName,
+        email: s.email,
+        role: s.role,
+        avatarUrl: s.avatarUrl,
+        active: s.active,
+        createdAt: s.createdAt,
+      }))
+    );
+  });
+
+  app.post("/api/staff", requireAdmin, async (req, res) => {
+    const parsed = createReceptionistSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const existing = await storage.getReceptionistByUsername(parsed.data.username);
+    if (existing) return res.status(409).json({ message: "Username already taken" });
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+    const created = await storage.createReceptionist({
+      username: parsed.data.username,
+      passwordHash,
+      fullName: parsed.data.fullName,
+      email: parsed.data.email || undefined,
+      role: parsed.data.role,
+      avatarUrl: parsed.data.avatarUrl,
+    });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "staff_created",
+      details: `Created ${created.role} account for ${created.fullName} (${created.username})`,
+    });
+    res.status(201).json({
+      id: created.id,
+      username: created.username,
+      fullName: created.fullName,
+      email: created.email,
+      role: created.role,
+      avatarUrl: created.avatarUrl,
+      active: created.active,
+      createdAt: created.createdAt,
+    });
+  });
+
+  app.patch("/api/staff/:id", requireAdmin, async (req, res) => {
+    const parsed = updateReceptionistSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const target = await storage.getReceptionistById(req.params.id);
+    if (!target) return res.status(404).json({ message: "Staff member not found" });
+
+    const payload: Record<string, any> = {};
+    if (parsed.data.fullName !== undefined) payload.fullName = parsed.data.fullName;
+    if (parsed.data.email !== undefined) payload.email = parsed.data.email || null;
+    if (parsed.data.role !== undefined) payload.role = parsed.data.role;
+    if (parsed.data.avatarUrl !== undefined) payload.avatarUrl = parsed.data.avatarUrl;
+    if (parsed.data.active !== undefined) payload.active = parsed.data.active;
+    if (parsed.data.password) payload.passwordHash = await bcrypt.hash(parsed.data.password, 10);
+
+    const updated = await storage.updateReceptionist(req.params.id, payload);
+    if (!updated) return res.status(404).json({ message: "Staff member not found" });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "staff_updated",
+      details: `Updated ${updated.fullName} (${updated.username}): ${Object.keys(payload).join(", ")}`,
+    });
+    res.json({
+      id: updated.id,
+      username: updated.username,
+      fullName: updated.fullName,
+      email: updated.email,
+      role: updated.role,
+      avatarUrl: updated.avatarUrl,
+      active: updated.active,
+      createdAt: updated.createdAt,
     });
   });
 
@@ -146,18 +242,40 @@ export function registerRoutes(app: Express) {
     res.json(await storage.getRooms());
   });
 
-  app.post("/api/rooms", requireAuth, async (req, res) => {
+  app.post("/api/rooms", requireAdmin, async (req, res) => {
     const parsed = insertRoomSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
     const room = await storage.createRoom(parsed.data);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "room_created",
+      details: `Room ${room.roomNumber} (${room.roomType})`,
+    });
     res.status(201).json(room);
   });
 
   app.patch("/api/rooms/:id", requireAuth, async (req, res) => {
     const parsed = updateRoomSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+
+    // Non-admins may only change room status (e.g. marking a room for maintenance).
+    // Editing name/type/price/capacity/amenities is restricted to admins.
+    if (req.session.role !== "admin") {
+      const allowedKeys = Object.keys(parsed.data).every((k) => k === "status");
+      if (!allowedKeys) {
+        return res.status(403).json({ message: "Only an admin can edit room details" });
+      }
+    }
+
     const room = await storage.updateRoom(req.params.id, parsed.data);
     if (!room) return res.status(404).json({ message: "Room not found" });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "room_updated",
+      details: `Room ${room.roomNumber} updated: ${Object.keys(parsed.data).join(", ")}`,
+    });
     res.json(room);
   });
 

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type Shift } from "../lib/api";
 
-type AuthUser = { id: string; username: string; fullName: string; role: string } | null;
+type AuthUser = { id: string; username: string; fullName: string; role: string; avatarUrl?: string | null } | null;
 
 type AuthContextValue = {
   user: AuthUser;
@@ -10,6 +10,7 @@ type AuthContextValue = {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshShift: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -47,8 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setShift(current);
   }
 
+  async function refreshUser() {
+    const res = await api.me();
+    setUser(res);
+    setShift(res.shift);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, shift, loading, login, logout, refreshShift }}>
+    <AuthContext.Provider value={{ user, shift, loading, login, logout, refreshShift, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
