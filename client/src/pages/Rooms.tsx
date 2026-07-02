@@ -3,12 +3,104 @@ import { api, type Room } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { fileToResizedDataUrl } from "../lib/image";
 
+const AMENITY_ICONS: Record<string, string> = {
+  "Wi-Fi": "📶",
+  "TV": "📺",
+  "AC": "❄️",
+  "Mini Bar": "🍹",
+  "Jacuzzi": "🛁",
+  "Butler Service": "🤵",
+};
+
+function RoomDetailModal({ room, onClose }: { room: Room; onClose: () => void }) {
+  const images = (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls : room.imageUrl ? [room.imageUrl] : [];
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  function prev() { setActiveIdx((i) => (i - 1 + images.length) % images.length); }
+  function next() { setActiveIdx((i) => (i + 1) % images.length); }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal glass room-detail-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Image gallery */}
+        <div className="room-detail-gallery">
+          {images.length > 0 ? (
+            <>
+              <div
+                className="room-detail-hero"
+                style={{ backgroundImage: `url(${images[activeIdx]})` }}
+              >
+                {images.length > 1 && (
+                  <>
+                    <button className="gallery-nav gallery-prev" onClick={prev}>‹</button>
+                    <button className="gallery-nav gallery-next" onClick={next}>›</button>
+                    <div className="gallery-counter">{activeIdx + 1} / {images.length}</div>
+                  </>
+                )}
+                <span className={`badge status-${room.status} room-detail-status-badge`}>
+                  {room.status}
+                </span>
+              </div>
+              {images.length > 1 && (
+                <div className="room-detail-thumbs">
+                  {images.map((url, i) => (
+                    <div
+                      key={i}
+                      className={`room-detail-thumb ${i === activeIdx ? "active" : ""}`}
+                      style={{ backgroundImage: `url(${url})` }}
+                      onClick={() => setActiveIdx(i)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="room-detail-hero room-detail-hero-empty">
+              <span style={{ fontSize: 64 }}>{room.roomType.includes("Suite") ? "🏰" : "🛏️"}</span>
+              <span className={`badge status-${room.status} room-detail-status-badge`}>{room.status}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="room-detail-info">
+          <div className="room-detail-header">
+            <div>
+              <h2 className="room-detail-type">{room.roomType}</h2>
+              <div className="room-detail-number">Room {room.roomNumber}</div>
+            </div>
+            <div className="room-detail-price">₦{Number(room.pricePerNight).toLocaleString()}<span>/night</span></div>
+          </div>
+
+          <div className="room-detail-meta">
+            <div className="room-detail-meta-item">👥<span>Up to {room.capacity} guests</span></div>
+            <div className="room-detail-meta-item">🏨<span>{room.roomType}</span></div>
+          </div>
+
+          <div className="room-detail-section-title">Amenities</div>
+          <div className="room-detail-amenities">
+            {room.amenities.map((a) => (
+              <div key={a} className="room-detail-amenity">
+                <span className="room-detail-amenity-icon">{AMENITY_ICONS[a] || "✔️"}</span>
+                <span>{a}</span>
+              </div>
+            ))}
+          </div>
+
+          <button className="btn full" style={{ marginTop: 20 }} onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Rooms() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [rooms, setRooms] = useState<Room[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [viewing, setViewing] = useState<Room | null>(null);
   const [editing, setEditing] = useState<Room | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -148,25 +240,32 @@ export default function Rooms() {
       <div className="room-grid">
         {rooms.map((room) => {
           const primaryImage = (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls[0] : room.imageUrl;
+          const extraCount = (room.imageUrls?.length ?? 0) - 1;
           return (
             <div key={room.id} className="room-card glass">
-              <div className="room-image" style={primaryImage ? { backgroundImage: `url(${primaryImage})` } : undefined}>
+              {/* Clickable image zone — opens detail for everyone */}
+              <div
+                className="room-image room-image-clickable"
+                style={primaryImage ? { backgroundImage: `url(${primaryImage})` } : undefined}
+                onClick={() => setViewing(room)}
+                title="Click to view room details"
+              >
                 {!primaryImage && (room.roomType.includes("Suite") ? "🏰" : "🛏️")}
-              </div>
-              {room.imageUrls && room.imageUrls.length > 1 && (
-                <div className="room-thumb-strip">
-                  {room.imageUrls.map((url, i) => (
-                    <div
-                      key={i}
-                      className="room-thumb"
-                      style={{ backgroundImage: `url(${url})` }}
-                    />
-                  ))}
+                {extraCount > 0 && (
+                  <span className="room-image-extra-badge">+{extraCount} photo{extraCount > 1 ? "s" : ""}</span>
+                )}
+                <div className="room-image-overlay">
+                  <span className="room-image-view-btn">🔍 View Room</span>
                 </div>
-              )}
+              </div>
               <div className="room-body">
                 <div className="room-title-row">
-                  <strong>{room.roomType}</strong>
+                  <strong
+                    className="room-type-link"
+                    onClick={() => setViewing(room)}
+                  >
+                    {room.roomType}
+                  </strong>
                   <span className={`badge status-${room.status}`}>{room.status}</span>
                 </div>
                 <div className="room-number">Room {room.roomNumber}</div>
@@ -174,7 +273,7 @@ export default function Rooms() {
                 <div className="room-amenities">
                   {room.amenities.map((a) => (
                     <span key={a} className="amenity-chip">
-                      {a}
+                      {AMENITY_ICONS[a] || "•"} {a}
                     </span>
                   ))}
                 </div>
@@ -195,6 +294,8 @@ export default function Rooms() {
           );
         })}
       </div>
+
+      {viewing && <RoomDetailModal room={viewing} onClose={() => setViewing(null)} />}
 
       {showNew && (
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
