@@ -23,32 +23,34 @@ declare module "express-session" {
   }
 }
 
-async function requireAuth(req: Request, res: Response, next: NextFunction) {
+function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
   // Verify the account still exists and is active (guards against deleted/deactivated users)
-  const user = await storage.getReceptionistById(req.session.receptionistId);
-  if (!user || !user.active) {
-    req.session.destroy(() => {});
-    return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
-  }
-  next();
+  storage.getReceptionistById(req.session.receptionistId).then((user) => {
+    if (!user || !user.active) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
+    }
+    next();
+  }).catch(next);
 }
 
-async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  const user = await storage.getReceptionistById(req.session.receptionistId);
-  if (!user || !user.active) {
-    req.session.destroy(() => {});
-    return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
-  }
-  if (user.role !== "admin") {
-    return res.status(403).json({ message: "Admin access required" });
-  }
-  next();
+  storage.getReceptionistById(req.session.receptionistId).then((user) => {
+    if (!user || !user.active) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
+    }
+    if (user.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  }).catch(next);
 }
 
 function nightsBetween(checkIn: string, checkOut: string): number {
