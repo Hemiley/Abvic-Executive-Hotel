@@ -24,14 +24,34 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Apply custom background whenever settings change
+  // Apply background + visual settings as CSS custom properties
   useEffect(() => {
+    const root = document.documentElement;
+    // Remove the old direct body.style.background so ::before takes over
+    document.body.style.background = "";
+
     if (settings?.backgroundStyle) {
-      document.body.style.background = settings.backgroundStyle;
+      root.style.setProperty("--bg-custom", settings.backgroundStyle);
     } else {
-      document.body.style.background = "";
+      root.style.removeProperty("--bg-custom");
     }
-  }, [settings?.backgroundStyle]);
+
+    const opacity = settings?.bgOpacity != null ? parseFloat(settings.bgOpacity) : 1;
+    root.style.setProperty("--bg-opacity", String(opacity));
+    root.style.setProperty("--bg-blur", `${settings?.bgBlur ?? 0}px`);
+
+    if (settings?.fontColor) {
+      root.style.setProperty("--ui-font-color", settings.fontColor);
+    } else {
+      root.style.removeProperty("--ui-font-color");
+    }
+
+    if (settings?.fontSize) {
+      root.style.setProperty("--ui-font-size", `${settings.fontSize}px`);
+    } else {
+      root.style.removeProperty("--ui-font-size");
+    }
+  }, [settings?.backgroundStyle, settings?.bgOpacity, settings?.bgBlur, settings?.fontColor, settings?.fontSize]);
 
   useEffect(() => {
     refresh();

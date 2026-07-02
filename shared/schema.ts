@@ -112,6 +112,10 @@ export const hotelSettings = pgTable("hotel_settings", {
   hotelName: text("hotel_name").notNull().default("Grand Hotel"),
   logoUrl: text("logo_url"),
   backgroundStyle: text("background_style"),
+  bgOpacity: numeric("bg_opacity").notNull().default("1"),
+  bgBlur: integer("bg_blur").notNull().default(0),
+  fontColor: text("font_color"),
+  fontSize: integer("font_size"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -192,6 +196,10 @@ export const updateHotelSettingsSchema = z.object({
   hotelName: z.string().min(1).optional(),
   logoUrl: z.string().optional(),
   backgroundStyle: z.string().optional(),
+  bgOpacity: z.number().min(0).max(1).optional(),
+  bgBlur: z.number().min(0).max(20).optional(),
+  fontColor: z.string().optional(),
+  fontSize: z.number().min(10).max(28).optional(),
 });
 
 export const updateReceptionistSchema = z.object({

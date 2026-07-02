@@ -26,6 +26,8 @@ export default function HotelSettings() {
   // Branding state
   const [hotelName, setHotelName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [fontColor, setFontColor] = useState("#e8ebff");
+  const [fontSize, setFontSize] = useState(14);
   const [brandSaving, setBrandSaving] = useState(false);
   const [brandError, setBrandError] = useState("");
   const [brandSuccess, setBrandSuccess] = useState("");
@@ -33,6 +35,8 @@ export default function HotelSettings() {
   // Background state
   const [selectedBg, setSelectedBg] = useState<string>("");
   const [customBgUrl, setCustomBgUrl] = useState("");
+  const [bgOpacity, setBgOpacity] = useState(1);
+  const [bgBlur, setBgBlur] = useState(0);
   const [bgSaving, setBgSaving] = useState(false);
   const [bgError, setBgError] = useState("");
   const [bgSuccess, setBgSuccess] = useState("");
@@ -42,6 +46,10 @@ export default function HotelSettings() {
       setHotelName(settings.hotelName);
       setLogoUrl(settings.logoUrl || "");
       setSelectedBg(settings.backgroundStyle || "");
+      setBgOpacity(settings.bgOpacity != null ? parseFloat(settings.bgOpacity) : 1);
+      setBgBlur(settings.bgBlur ?? 0);
+      setFontColor(settings.fontColor || "#e8ebff");
+      setFontSize(settings.fontSize ?? 14);
     }
   }, [settings]);
 
@@ -62,7 +70,7 @@ export default function HotelSettings() {
     setBrandSuccess("");
     setBrandSaving(true);
     try {
-      await api.updateSettings({ hotelName, logoUrl });
+      await api.updateSettings({ hotelName, logoUrl, fontColor, fontSize });
       await refresh();
       setBrandSuccess("Hotel branding saved.");
     } catch (err: any) {
@@ -89,7 +97,11 @@ export default function HotelSettings() {
     setBgSuccess("");
     setBgSaving(true);
     try {
-      await api.updateSettings({ backgroundStyle: selectedBg || undefined });
+      await api.updateSettings({
+        backgroundStyle: selectedBg || undefined,
+        bgOpacity,
+        bgBlur,
+      });
       await refresh();
       setBgSuccess("Background saved and applied.");
     } catch (err: any) {
@@ -102,6 +114,26 @@ export default function HotelSettings() {
   function clearBackground() {
     setSelectedBg("");
     setCustomBgUrl("");
+    setBgOpacity(1);
+    setBgBlur(0);
+  }
+
+  // Live-preview helpers — update CSS vars in real time while dragging
+  function handleOpacityChange(val: number) {
+    setBgOpacity(val);
+    document.documentElement.style.setProperty("--bg-opacity", String(val));
+  }
+  function handleBlurChange(val: number) {
+    setBgBlur(val);
+    document.documentElement.style.setProperty("--bg-blur", `${val}px`);
+  }
+  function handleFontColorChange(val: string) {
+    setFontColor(val);
+    document.documentElement.style.setProperty("--ui-font-color", val);
+  }
+  function handleFontSizeChange(val: number) {
+    setFontSize(val);
+    document.documentElement.style.setProperty("--ui-font-size", `${val}px`);
   }
 
   const TABS: { key: Section; label: string; icon: string }[] = [
@@ -167,6 +199,62 @@ export default function HotelSettings() {
             <input value={hotelName} onChange={(e) => setHotelName(e.target.value)} required />
           </div>
 
+          {/* ── Text Appearance ── */}
+          <div className="settings-divider"><span>Text Appearance</span></div>
+
+          <div className="appearance-grid">
+            <div className="field">
+              <label>
+                Font Color
+                <span className="field-hint">Applied to all text across the console</span>
+              </label>
+              <div className="color-picker-row">
+                <input
+                  type="color"
+                  value={fontColor}
+                  onChange={(e) => handleFontColorChange(e.target.value)}
+                  className="color-swatch-input"
+                />
+                <input
+                  type="text"
+                  value={fontColor}
+                  onChange={(e) => handleFontColorChange(e.target.value)}
+                  className="color-hex-input"
+                  placeholder="#e8ebff"
+                  maxLength={7}
+                />
+                <button
+                  type="button"
+                  className="btn secondary"
+                  style={{ flexShrink: 0 }}
+                  onClick={() => handleFontColorChange("#e8ebff")}
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>
+                Font Size — <strong>{fontSize}px</strong>
+                <span className="field-hint">Base size for body text (10–28 px)</span>
+              </label>
+              <div className="slider-row">
+                <span className="slider-label">10px</span>
+                <input
+                  type="range"
+                  min={10}
+                  max={28}
+                  step={1}
+                  value={fontSize}
+                  onChange={(e) => handleFontSizeChange(Number(e.target.value))}
+                  className="range-slider"
+                />
+                <span className="slider-label">28px</span>
+              </div>
+            </div>
+          </div>
+
           <div className="modal-actions">
             <button type="submit" className="btn" disabled={brandSaving}>
               {brandSaving ? "Saving…" : "Save Branding"}
@@ -221,6 +309,51 @@ export default function HotelSettings() {
             </label>
           </div>
 
+          {/* ── Image overlay controls ── */}
+          <div className="settings-divider"><span>Image Overlay</span></div>
+
+          <div className="appearance-grid">
+            <div className="field">
+              <label>
+                Background Opacity — <strong>{Math.round(bgOpacity * 100)}%</strong>
+                <span className="field-hint">Lower values make the background more transparent</span>
+              </label>
+              <div className="slider-row">
+                <span className="slider-label">0%</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={bgOpacity}
+                  onChange={(e) => handleOpacityChange(Number(e.target.value))}
+                  className="range-slider"
+                />
+                <span className="slider-label">100%</span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>
+                Background Blur — <strong>{bgBlur}px</strong>
+                <span className="field-hint">Higher values create a frosted-glass effect</span>
+              </label>
+              <div className="slider-row">
+                <span className="slider-label">0px</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={bgBlur}
+                  onChange={(e) => handleBlurChange(Number(e.target.value))}
+                  className="range-slider"
+                />
+                <span className="slider-label">20px</span>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
             {selectedBg && (
               <button type="button" className="btn secondary" onClick={clearBackground}>
@@ -233,8 +366,8 @@ export default function HotelSettings() {
           </div>
 
           {selectedBg && (
-            <div className="bg-live-preview" style={{ background: selectedBg }}>
-              <span className="bg-live-label">Live preview</span>
+            <div className="bg-live-preview" style={{ background: selectedBg, opacity: bgOpacity, filter: `blur(${bgBlur}px)` }}>
+              <span className="bg-live-label" style={{ filter: "none", opacity: 1 }}>Live preview</span>
             </div>
           )}
         </div>

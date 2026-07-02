@@ -103,6 +103,10 @@ export type HotelSettings = {
   hotelName: string;
   logoUrl: string | null;
   backgroundStyle: string | null;
+  bgOpacity: string | null;
+  bgBlur: number | null;
+  fontColor: string | null;
+  fontSize: number | null;
   updatedAt: string;
 };
 
@@ -187,7 +191,7 @@ export const api = {
   deleteStaff: (id: string) => request<void>(`/api/staff/${id}`, { method: "DELETE" }),
 
   getSettings: () => request<HotelSettings>("/api/settings"),
-  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string }>) =>
+  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string; bgOpacity: number; bgBlur: number; fontColor: string; fontSize: number }>) =>
     request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
