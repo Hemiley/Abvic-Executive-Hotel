@@ -1196,6 +1196,53 @@ select option {
   display: block;
 }
 
+/* ── Stay type toggle ───────────────────────────────── */
+.stay-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.stay-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--glass-border);
+  background: var(--glass-bg);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  color: var(--text);
+}
+.stay-type-btn:hover {
+  border-color: var(--accent);
+}
+.stay-type-btn.active {
+  border-color: var(--accent);
+  background: rgba(124, 139, 255, 0.14);
+}
+.stay-type-icon { font-size: 22px; }
+.stay-type-name { font-weight: 600; font-size: 14px; }
+.stay-type-desc { font-size: 11px; color: var(--muted); }
+
+/* ── Booking price summary ──────────────────────────── */
+.booking-price-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.booking-price-summary strong {
+  font-size: 18px;
+  color: var(--accent);
+}
+
 /* ── Appearance controls ─────────────────────────────── */
 .settings-divider {
   display: flex;

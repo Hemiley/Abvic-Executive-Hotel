@@ -53,6 +53,8 @@ export type Reservation = {
   specialRequests: string | null;
   status: "pending" | "confirmed" | "checked_in" | "checked_out" | "cancelled";
   source: "walk_in" | "reservation";
+  stayType: "lodge" | "short_rest";
+  durationHours: number | null;
   receptionistId: string;
   createdAt: string;
   updatedAt: string;
@@ -107,6 +109,7 @@ export type HotelSettings = {
   bgBlur: number | null;
   fontColor: string | null;
   fontSize: number | null;
+  shortRestHourlyRate: string | null;
   updatedAt: string;
 };
 
@@ -116,6 +119,7 @@ export type DashboardSummary = {
   todaysCheckIns: number;
   todaysCheckOuts: number;
   walkInGuests: number;
+  shortRestGuests: number;
   pendingReservations: number;
   occupiedRooms: number;
   availableRooms: number;
@@ -191,7 +195,7 @@ export const api = {
   deleteStaff: (id: string) => request<void>(`/api/staff/${id}`, { method: "DELETE" }),
 
   getSettings: () => request<HotelSettings>("/api/settings"),
-  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string; bgOpacity: number; bgBlur: number; fontColor: string; fontSize: number }>) =>
+  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string; bgOpacity: number; bgBlur: number; fontColor: string; fontSize: number; shortRestHourlyRate: number }>) =>
     request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),

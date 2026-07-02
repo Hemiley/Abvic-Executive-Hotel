@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Reservation } from "../lib/api";
+import { useSettings } from "../context/SettingsContext";
 
 const STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "cancelled"];
 const PAYMENT_METHODS = ["cash", "pos", "bank_transfer", "card", "flutterwave", "paystack", "stripe"];
@@ -8,6 +9,7 @@ export default function Reservations() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [stayFilter, setStayFilter] = useState("all");
   const [error, setError] = useState("");
   const [payTarget, setPayTarget] = useState<Reservation | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -15,6 +17,8 @@ export default function Reservations() {
   const [payType, setPayType] = useState("payment");
   const [payTxn, setPayTxn] = useState("");
   const [receiptData, setReceiptData] = useState<any>(null);
+  const { settings } = useSettings();
+  const hourlyRate = settings?.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000;
 
   function load() {
     api.getReservations().then(setReservations).catch((e) => setError(e.message));
@@ -27,6 +31,7 @@ export default function Reservations() {
   const filtered = useMemo(() => {
     return reservations.filter((r) => {
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (stayFilter !== "all" && r.stayType !== stayFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         const hay = `${r.guest?.fullName || ""} ${r.guest?.phone || ""} ${r.room?.roomNumber || ""}`.toLowerCase();
@@ -34,7 +39,7 @@ export default function Reservations() {
       }
       return true;
     });
-  }, [reservations, search, statusFilter]);
+  }, [reservations, search, statusFilter, stayFilter]);
 
   async function updateStatus(id: string, status: string) {
     try {
@@ -47,12 +52,17 @@ export default function Reservations() {
 
   function openPayment(r: Reservation) {
     setPayTarget(r);
-    const nights = Math.max(
-      1,
-      Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / 86400000)
-    );
-    const total = r.room ? Number(r.room.pricePerNight) * nights : 0;
-    setPayAmount(total.toFixed(2));
+    let amount = 0;
+    if (r.stayType === "short_rest") {
+      amount = (r.durationHours ?? 1) * hourlyRate;
+    } else {
+      const nights = Math.max(
+        1,
+        Math.round((new Date(r.checkOutDate).getTime() - new Date(r.checkInDate).getTime()) / 86400000)
+      );
+      amount = r.room ? Number(r.room.pricePerNight) * nights : 0;
+    }
+    setPayAmount(amount.toFixed(2));
     setPayMethod("cash");
     setPayType("payment");
     setPayTxn("");
@@ -100,6 +110,11 @@ export default function Reservations() {
             </option>
           ))}
         </select>
+        <select value={stayFilter} onChange={(e) => setStayFilter(e.target.value)}>
+          <option value="all">All stay types</option>
+          <option value="lodge">Lodge</option>
+          <option value="short_rest">Short Rest</option>
+        </select>
       </div>
 
       {error && <p className="error-text">{error}</p>}
@@ -110,8 +125,9 @@ export default function Reservations() {
             <tr>
               <th>Guest</th>
               <th>Room</th>
+              <th>Stay Type</th>
               <th>Check-in</th>
-              <th>Check-out</th>
+              <th>Duration / Check-out</th>
               <th>Status</th>
               <th>Source</th>
               <th></th>
@@ -127,8 +143,28 @@ export default function Reservations() {
                 <td>
                   {r.room?.roomNumber} <span className="muted">({r.room?.roomType})</span>
                 </td>
+                <td>
+                  {r.stayType === "short_rest" ? (
+                    <span className="badge" style={{ background: "rgba(255,178,87,0.18)", color: "var(--warn)" }}>
+                      ⏱️ Short Rest
+                    </span>
+                  ) : (
+                    <span className="badge" style={{ background: "rgba(55,226,163,0.15)", color: "var(--success)" }}>
+                      🛏️ Lodge
+                    </span>
+                  )}
+                </td>
                 <td>{r.checkInDate}</td>
-                <td>{r.checkOutDate}</td>
+                <td>
+                  {r.stayType === "short_rest" ? (
+                    <span className="muted">
+                      {r.durationHours ?? 1} hr{(r.durationHours ?? 1) !== 1 ? "s" : ""}
+                      {" "}· ₦{((r.durationHours ?? 1) * hourlyRate).toLocaleString()}
+                    </span>
+                  ) : (
+                    r.checkOutDate
+                  )}
+                </td>
                 <td>
                   <span className={`badge status-${r.status}`}>{r.status.replace("_", " ")}</span>
                 </td>
@@ -164,7 +200,7 @@ export default function Reservations() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7}>No reservations found.</td>
+                <td colSpan={8}>No reservations found.</td>
               </tr>
             )}
           </tbody>
@@ -177,7 +213,18 @@ export default function Reservations() {
             <h2>Record Payment</h2>
             <p className="page-sub">
               {payTarget.guest?.fullName} — Room {payTarget.room?.roomNumber}
+              {payTarget.stayType === "short_rest" && (
+                <span className="badge" style={{ marginLeft: 8, background: "rgba(255,178,87,0.18)", color: "var(--warn)" }}>
+                  ⏱️ Short Rest · {payTarget.durationHours ?? 1}h
+                </span>
+              )}
             </p>
+            {payTarget.stayType === "short_rest" && (
+              <div className="booking-price-summary glass" style={{ marginBottom: 16 }}>
+                <span>₦{hourlyRate.toLocaleString()} × {payTarget.durationHours ?? 1} hr{(payTarget.durationHours ?? 1) !== 1 ? "s" : ""}</span>
+                <strong>₦{((payTarget.durationHours ?? 1) * hourlyRate).toLocaleString()}</strong>
+              </div>
+            )}
             <div className="field-row">
               <div className="field">
                 <label>Type</label>
@@ -229,6 +276,14 @@ export default function Reservations() {
             <div className="receipt-row">
               <span>Room</span>
               <strong>{receiptData.reservation.room?.roomNumber}</strong>
+            </div>
+            <div className="receipt-row">
+              <span>Stay Type</span>
+              <strong>
+                {receiptData.reservation.stayType === "short_rest"
+                  ? `Short Rest (${receiptData.reservation.durationHours ?? 1}h)`
+                  : "Lodge"}
+              </strong>
             </div>
             <div className="receipt-row">
               <span>Amount</span>

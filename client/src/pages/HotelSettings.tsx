@@ -28,6 +28,7 @@ export default function HotelSettings() {
   const [logoUrl, setLogoUrl] = useState("");
   const [fontColor, setFontColor] = useState("#e8ebff");
   const [fontSize, setFontSize] = useState(14);
+  const [shortRestHourlyRate, setShortRestHourlyRate] = useState(3000);
   const [brandSaving, setBrandSaving] = useState(false);
   const [brandError, setBrandError] = useState("");
   const [brandSuccess, setBrandSuccess] = useState("");
@@ -50,6 +51,7 @@ export default function HotelSettings() {
       setBgBlur(settings.bgBlur ?? 0);
       setFontColor(settings.fontColor || "#e8ebff");
       setFontSize(settings.fontSize ?? 14);
+      setShortRestHourlyRate(settings.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000);
     }
   }, [settings]);
 
@@ -70,7 +72,7 @@ export default function HotelSettings() {
     setBrandSuccess("");
     setBrandSaving(true);
     try {
-      await api.updateSettings({ hotelName, logoUrl, fontColor, fontSize });
+      await api.updateSettings({ hotelName, logoUrl, fontColor, fontSize, shortRestHourlyRate });
       await refresh();
       setBrandSuccess("Hotel branding saved.");
     } catch (err: any) {
@@ -253,6 +255,23 @@ export default function HotelSettings() {
                 <span className="slider-label">28px</span>
               </div>
             </div>
+          </div>
+
+          {/* ── Pricing ── */}
+          <div className="settings-divider"><span>Pricing</span></div>
+
+          <div className="field">
+            <label>
+              Short Rest Hourly Rate (₦)
+              <span className="field-hint">Price charged per hour for short rest guests</span>
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={shortRestHourlyRate}
+              onChange={(e) => setShortRestHourlyRate(Number(e.target.value))}
+            />
           </div>
 
           <div className="modal-actions">

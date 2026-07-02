@@ -58,6 +58,7 @@ export default function Dashboard() {
         { label: "Today's Check-ins", value: summary.todaysCheckIns, icon: "🛎️" },
         { label: "Today's Check-outs", value: summary.todaysCheckOuts, icon: "🚪" },
         { label: "Walk-in Guests", value: summary.walkInGuests, icon: "🚶" },
+        { label: "Short Rest Guests", value: summary.shortRestGuests, icon: "⏱️" },
         { label: "Pending Reservations", value: summary.pendingReservations, icon: "⏳" },
         { label: "Occupied Rooms", value: summary.occupiedRooms, icon: "🛏️" },
         { label: "Available Rooms", value: summary.availableRooms, icon: "✅" },

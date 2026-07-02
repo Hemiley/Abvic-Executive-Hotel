@@ -211,6 +211,8 @@ export const storage = {
     specialRequests?: string;
     status: string;
     source: string;
+    stayType?: string;
+    durationHours?: number;
     receptionistId: string;
     shiftId?: string;
   }): Promise<{ reservation: Reservation; guest: Guest; room: Room }> {
@@ -250,6 +252,8 @@ export const storage = {
           specialRequests: data.specialRequests,
           status: data.status,
           source: data.source,
+          stayType: data.stayType ?? "lodge",
+          durationHours: data.durationHours ?? null,
           receptionistId: data.receptionistId,
           shiftId: data.shiftId,
         })
@@ -357,9 +361,13 @@ export const storage = {
   },
   async updateHotelSettings(data: UpdateHotelSettings): Promise<HotelSettings> {
     const existing = await this.getHotelSettings();
+    // Drizzle's `numeric` columns require string values; coerce JS numbers before .set()
+    const payload: any = { ...data, updatedAt: new Date() };
+    if (payload.bgOpacity !== undefined) payload.bgOpacity = String(payload.bgOpacity);
+    if (payload.shortRestHourlyRate !== undefined) payload.shortRestHourlyRate = String(payload.shortRestHourlyRate);
     const [updated] = await db
       .update(hotelSettings)
-      .set({ ...data, updatedAt: new Date() })
+      .set(payload)
       .where(eq(hotelSettings.id, existing.id))
       .returning();
     return updated;

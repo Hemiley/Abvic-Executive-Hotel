@@ -71,6 +71,8 @@ export const reservations = pgTable("reservations", {
   specialRequests: text("special_requests"),
   status: text("status").notNull().default("pending"), // pending | confirmed | checked_in | checked_out | cancelled
   source: text("source").notNull().default("walk_in"), // walk_in | reservation
+  stayType: text("stay_type").notNull().default("lodge"), // lodge | short_rest
+  durationHours: integer("duration_hours"), // only set for short_rest
   receptionistId: uuid("receptionist_id").notNull(),
   shiftId: uuid("shift_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -116,6 +118,7 @@ export const hotelSettings = pgTable("hotel_settings", {
   bgBlur: integer("bg_blur").notNull().default(0),
   fontColor: text("font_color"),
   fontSize: integer("font_size"),
+  shortRestHourlyRate: numeric("short_rest_hourly_rate").notNull().default("3000"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -160,10 +163,12 @@ export const createBookingSchema = z.object({
   guest: guestSchema,
   roomId: z.string().uuid(),
   checkInDate: z.string().min(1),
-  checkOutDate: z.string().min(1),
+  checkOutDate: z.string().optional(),
   numGuests: z.number().min(1).default(1),
   specialRequests: z.string().optional(),
   source: z.enum(["walk_in", "reservation"]).default("walk_in"),
+  stayType: z.enum(["lodge", "short_rest"]).default("lodge"),
+  durationHours: z.number().min(1).max(24).optional(),
 });
 
 export const updateReservationSchema = z.object({
@@ -200,6 +205,7 @@ export const updateHotelSettingsSchema = z.object({
   bgBlur: z.number().min(0).max(20).optional(),
   fontColor: z.string().optional(),
   fontSize: z.number().min(10).max(28).optional(),
+  shortRestHourlyRate: z.number().min(0).optional(),
 });
 
 export const updateReceptionistSchema = z.object({

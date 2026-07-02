@@ -315,7 +315,12 @@ export function registerRoutes(app: Express) {
   app.post("/api/bookings", requireAuth, async (req, res, next) => {
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid booking data" });
-    const { guest, roomId, checkInDate, checkOutDate, numGuests, specialRequests, source } = parsed.data;
+    const { guest, roomId, checkInDate, numGuests, specialRequests, source, stayType, durationHours } = parsed.data;
+
+    // For short_rest, checkout = same day; for lodge use provided date
+    const checkOutDate = stayType === "short_rest"
+      ? checkInDate
+      : (parsed.data.checkOutDate ?? checkInDate);
 
     const shift = await storage.getActiveShiftForReceptionist(req.session.receptionistId!);
     const status = source === "walk_in" ? "checked_in" : "pending";
@@ -340,6 +345,8 @@ export function registerRoutes(app: Express) {
         specialRequests,
         status,
         source,
+        stayType,
+        durationHours,
         receptionistId: req.session.receptionistId!,
         shiftId: shift?.id,
       });
@@ -354,16 +361,19 @@ export function registerRoutes(app: Express) {
       await storage.incrementShiftStats(shift.id, { guestsServed: 1, roomsBooked: 1 });
     }
 
+    const stayLabel = stayType === "short_rest"
+      ? `Short Rest (${durationHours ?? 1}h)`
+      : "Lodge";
     await storage.createNotification({
       type: source === "walk_in" ? "guest_arrival" : "new_reservation",
-      message: `${source === "walk_in" ? "Walk-in guest" : "New reservation"}: ${guest.fullName} — Room ${room.roomNumber}`,
+      message: `${source === "walk_in" ? "Walk-in guest" : "New reservation"} [${stayLabel}]: ${guest.fullName} — Room ${room.roomNumber}`,
     });
 
     await storage.logAction({
       receptionistId: req.session.receptionistId,
       receptionistName: req.session.receptionistName,
       action: source === "walk_in" ? "walk_in_booking" : "reservation_created",
-      details: `${guest.fullName} booked room ${room.roomNumber}`,
+      details: `${guest.fullName} booked room ${room.roomNumber} — ${stayLabel}`,
     });
 
     res.status(201).json({ reservation, guest: guestRecord, room });
@@ -494,7 +504,8 @@ export function registerRoutes(app: Express) {
       shift,
       todaysCheckIns: reservationsList.filter((r) => r.status === "checked_in" && isToday(r.updatedAt)).length,
       todaysCheckOuts: reservationsList.filter((r) => r.status === "checked_out" && isToday(r.updatedAt)).length,
-      walkInGuests: todaysReservations.filter((r) => r.source === "walk_in").length,
+      walkInGuests: todaysReservations.filter((r) => r.source === "walk_in" && r.stayType !== "short_rest").length,
+      shortRestGuests: todaysReservations.filter((r) => r.stayType === "short_rest").length,
       pendingReservations: reservationsList.filter((r) => r.status === "pending").length,
       occupiedRooms: roomsStatus.occupied || 0,
       availableRooms: roomsStatus.available || 0,
