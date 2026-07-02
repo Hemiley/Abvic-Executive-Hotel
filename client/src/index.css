@@ -1196,6 +1196,116 @@ select option {
   display: block;
 }
 
+/* ── Short rest countdown ───────────────────────────── */
+.sr-countdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(124,139,255,0.08);
+  border: 1px solid rgba(124,139,255,0.2);
+  min-width: 140px;
+}
+.sr-countdown-urgent {
+  background: rgba(255,100,100,0.12);
+  border-color: rgba(255,100,100,0.35);
+  animation: sr-pulse 1s ease-in-out infinite;
+}
+.sr-countdown-expired {
+  background: rgba(255,100,100,0.15);
+  border-color: rgba(255,100,100,0.5);
+  animation: none;
+}
+@keyframes sr-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,100,100,0); }
+  50%       { box-shadow: 0 0 0 5px rgba(255,100,100,0.2); }
+}
+
+/* SVG ring */
+.sr-countdown-ring-wrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+.sr-countdown-ring {
+  width: 34px;
+  height: 34px;
+  transform: rotate(-90deg);
+}
+.sr-ring-bg {
+  fill: none;
+  stroke: rgba(255,255,255,0.1);
+  stroke-width: 3;
+}
+.sr-ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.8s linear;
+}
+.sr-countdown-urgent .sr-ring-fill { stroke: #ff6464; }
+.sr-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sr-countdown-time {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--text);
+  line-height: 1.2;
+}
+.sr-sec-urgent { color: #ff6464; }
+.sr-countdown-sublabel {
+  font-size: 10px;
+  color: var(--muted);
+  align-self: flex-end;
+}
+.sr-countdown-icon { font-size: 20px; }
+.sr-countdown-label { font-size: 13px; font-weight: 700; color: #ff6464; }
+
+/* Expiry alert banner */
+.sr-expiry-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background: rgba(255,100,100,0.14);
+  border: 1.5px solid rgba(255,100,100,0.4);
+  animation: sr-pulse 1.5s ease-in-out infinite;
+}
+.sr-expiry-icon { font-size: 28px; flex-shrink: 0; }
+.sr-expiry-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.sr-expiry-text strong { font-size: 15px; color: #ff8080; }
+.sr-expiry-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
+}
+.sr-expiry-close:hover { color: var(--text); }
+
 /* ── Room detail modal ──────────────────────────────── */
 .room-detail-modal {
   max-width: 680px;

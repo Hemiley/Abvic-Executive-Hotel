@@ -1,10 +1,88 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Reservation } from "../lib/api";
 import { useSettings } from "../context/SettingsContext";
+import { useNotifications } from "../context/NotificationsContext";
 
 const STATUS_OPTIONS = ["pending", "confirmed", "checked_in", "checked_out", "cancelled"];
 const PAYMENT_METHODS = ["cash", "pos", "bank_transfer", "card", "flutterwave", "paystack", "stripe"];
 
+// ── Short Rest Countdown ────────────────────────────────────────────────────
+function ShortRestCountdown({
+  reservation,
+  onExpire,
+}: {
+  reservation: Reservation;
+  onExpire: (r: Reservation) => void;
+}) {
+  const durationMs = (reservation.durationHours ?? 1) * 3600 * 1000;
+  // updatedAt is the last status-change time — used as check-in timestamp
+  const checkInAt = new Date(reservation.updatedAt).getTime();
+  const endsAt = checkInAt + durationMs;
+
+  const firedRef = useRef(false);
+  const [remaining, setRemaining] = useState(() => Math.max(0, endsAt - Date.now()));
+
+  useEffect(() => {
+    // If the timer was already past when the component mounts, fire immediately
+    if (remaining === 0 && !firedRef.current) {
+      firedRef.current = true;
+      onExpire(reservation);
+    }
+
+    const id = setInterval(() => {
+      const left = Math.max(0, endsAt - Date.now());
+      setRemaining(left);
+      if (left === 0 && !firedRef.current) {
+        firedRef.current = true;
+        onExpire(reservation);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [endsAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (remaining === 0) {
+    return (
+      <div className="sr-countdown sr-countdown-expired">
+        <span className="sr-countdown-icon">⏰</span>
+        <span className="sr-countdown-label">Time&apos;s Up!</span>
+      </div>
+    );
+  }
+
+  const totalSec = Math.floor(remaining / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pct = Math.max(0, (remaining / durationMs) * 100);
+  const urgent = pct < 15; // last 15%
+
+  return (
+    <div className={`sr-countdown ${urgent ? "sr-countdown-urgent" : ""}`}>
+      <div className="sr-countdown-ring-wrap">
+        <svg className="sr-countdown-ring" viewBox="0 0 36 36">
+          <circle className="sr-ring-bg" cx="18" cy="18" r="15.9" />
+          <circle
+            className="sr-ring-fill"
+            cx="18"
+            cy="18"
+            r="15.9"
+            strokeDasharray={`${pct} ${100 - pct}`}
+            strokeDashoffset="25"
+          />
+        </svg>
+        <span className="sr-ring-pct">{Math.round(pct)}%</span>
+      </div>
+      <div className="sr-countdown-time">
+        {h > 0 && <span>{String(h).padStart(2, "0")}h </span>}
+        <span>{String(m).padStart(2, "0")}m </span>
+        <span className={urgent ? "sr-sec-urgent" : ""}>{String(s).padStart(2, "0")}s</span>
+      </div>
+      <div className="sr-countdown-sublabel">remaining</div>
+    </div>
+  );
+}
+
+// ── Main Component ──────────────────────────────────────────────────────────
 export default function Reservations() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [search, setSearch] = useState("");
@@ -17,16 +95,20 @@ export default function Reservations() {
   const [payType, setPayType] = useState("payment");
   const [payTxn, setPayTxn] = useState("");
   const [receiptData, setReceiptData] = useState<any>(null);
+  const [expiredAlert, setExpiredAlert] = useState<Reservation | null>(null);
   const { settings } = useSettings();
+  const { reload: reloadNotifs } = useNotifications();
   const hourlyRate = settings?.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000;
+  // Track which IDs have already fired the expiry notification (survive re-renders)
+  const notifiedRef = useRef<Set<string>>(new Set(
+    JSON.parse(localStorage.getItem("sr_notified") ?? "[]")
+  ));
 
   function load() {
     api.getReservations().then(setReservations).catch((e) => setError(e.message));
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => {
     return reservations.filter((r) => {
@@ -40,6 +122,26 @@ export default function Reservations() {
       return true;
     });
   }, [reservations, search, statusFilter, stayFilter]);
+
+  async function handleExpire(r: Reservation) {
+    // Only fire once per reservation across renders
+    if (notifiedRef.current.has(r.id)) return;
+    notifiedRef.current.add(r.id);
+    const arr = Array.from(notifiedRef.current);
+    localStorage.setItem("sr_notified", JSON.stringify(arr.slice(-50))); // keep last 50
+
+    // Show the in-page alert banner
+    setExpiredAlert(r);
+
+    // Push a checkout notification into the system
+    try {
+      await api.createNotification({
+        type: "checkout",
+        message: `⏰ Short rest time expired — ${r.guest?.fullName ?? "Guest"} (Room ${r.room?.roomNumber ?? "?"}) should check out now.`,
+      });
+      reloadNotifs(); // refresh sidebar badge
+    } catch (_) {}
+  }
 
   async function updateStatus(id: string, status: string) {
     try {
@@ -95,6 +197,26 @@ export default function Reservations() {
         </div>
       </div>
 
+      {/* Time's-up alert banner */}
+      {expiredAlert && (
+        <div className="sr-expiry-banner">
+          <span className="sr-expiry-icon">⏰</span>
+          <div className="sr-expiry-text">
+            <strong>Short rest ended</strong>
+            <span>
+              {expiredAlert.guest?.fullName} in Room {expiredAlert.room?.roomNumber} — time is up. Please proceed with check-out.
+            </span>
+          </div>
+          <button
+            className="btn secondary"
+            onClick={() => { updateStatus(expiredAlert.id, "checked_out"); setExpiredAlert(null); }}
+          >
+            Check Out Now
+          </button>
+          <button className="sr-expiry-close" onClick={() => setExpiredAlert(null)}>✕</button>
+        </div>
+      )}
+
       <div className="toolbar">
         <input
           className="search-input"
@@ -105,9 +227,7 @@ export default function Reservations() {
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="all">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s.replace("_", " ")}
-            </option>
+            <option key={s} value={s}>{s.replace("_", " ")}</option>
           ))}
         </select>
         <select value={stayFilter} onChange={(e) => setStayFilter(e.target.value)}>
@@ -156,7 +276,9 @@ export default function Reservations() {
                 </td>
                 <td>{r.checkInDate}</td>
                 <td>
-                  {r.stayType === "short_rest" ? (
+                  {r.stayType === "short_rest" && r.status === "checked_in" ? (
+                    <ShortRestCountdown reservation={r} onExpire={handleExpire} />
+                  ) : r.stayType === "short_rest" ? (
                     <span className="muted">
                       {r.durationHours ?? 1} hr{(r.durationHours ?? 1) !== 1 ? "s" : ""}
                       {" "}· ₦{((r.durationHours ?? 1) * hourlyRate).toLocaleString()}
@@ -243,9 +365,7 @@ export default function Reservations() {
               <label>Payment Method</label>
               <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
                 {PAYMENT_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {m.replace("_", " ")}
-                  </option>
+                  <option key={m} value={m}>{m.replace("_", " ")}</option>
                 ))}
               </select>
             </div>
@@ -254,12 +374,8 @@ export default function Reservations() {
               <input value={payTxn} onChange={(e) => setPayTxn(e.target.value)} />
             </div>
             <div className="modal-actions">
-              <button className="btn secondary" onClick={() => setPayTarget(null)}>
-                Cancel
-              </button>
-              <button className="btn" onClick={submitPayment}>
-                Confirm Payment
-              </button>
+              <button className="btn secondary" onClick={() => setPayTarget(null)}>Cancel</button>
+              <button className="btn" onClick={submitPayment}>Confirm Payment</button>
             </div>
           </div>
         </div>
@@ -269,14 +385,8 @@ export default function Reservations() {
         <div className="modal-overlay" onClick={() => setReceiptData(null)}>
           <div className="modal glass receipt" onClick={(e) => e.stopPropagation()}>
             <h2>Payment Receipt</h2>
-            <div className="receipt-row">
-              <span>Guest</span>
-              <strong>{receiptData.reservation.guest?.fullName}</strong>
-            </div>
-            <div className="receipt-row">
-              <span>Room</span>
-              <strong>{receiptData.reservation.room?.roomNumber}</strong>
-            </div>
+            <div className="receipt-row"><span>Guest</span><strong>{receiptData.reservation.guest?.fullName}</strong></div>
+            <div className="receipt-row"><span>Room</span><strong>{receiptData.reservation.room?.roomNumber}</strong></div>
             <div className="receipt-row">
               <span>Stay Type</span>
               <strong>
@@ -285,25 +395,11 @@ export default function Reservations() {
                   : "Lodge"}
               </strong>
             </div>
-            <div className="receipt-row">
-              <span>Amount</span>
-              <strong>₦{Number(receiptData.payment.amount).toFixed(2)}</strong>
-            </div>
-            <div className="receipt-row">
-              <span>Method</span>
-              <strong>{receiptData.payment.method}</strong>
-            </div>
-            <div className="receipt-row">
-              <span>Transaction ID</span>
-              <strong>{receiptData.payment.transactionId || "—"}</strong>
-            </div>
-            <div className="receipt-row">
-              <span>Time</span>
-              <strong>{new Date(receiptData.payment.createdAt).toLocaleString()}</strong>
-            </div>
-            <button className="btn full" onClick={() => setReceiptData(null)}>
-              Close
-            </button>
+            <div className="receipt-row"><span>Amount</span><strong>₦{Number(receiptData.payment.amount).toFixed(2)}</strong></div>
+            <div className="receipt-row"><span>Method</span><strong>{receiptData.payment.method}</strong></div>
+            <div className="receipt-row"><span>Transaction ID</span><strong>{receiptData.payment.transactionId || "—"}</strong></div>
+            <div className="receipt-row"><span>Time</span><strong>{new Date(receiptData.payment.createdAt).toLocaleString()}</strong></div>
+            <button className="btn full" onClick={() => setReceiptData(null)}>Close</button>
           </div>
         </div>
       )}

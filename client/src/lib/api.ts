@@ -201,6 +201,8 @@ export const api = {
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),
   markNotificationRead: (id: string) => request(`/api/notifications/${id}/read`, { method: "POST" }),
+  createNotification: (data: { type?: string; message: string }) =>
+    request<Notification>("/api/notifications", { method: "POST", body: JSON.stringify(data) }),
   getAuditLogs: () => request<AuditLog[]>("/api/audit-logs"),
   getReportsSummary: () =>
     request<{

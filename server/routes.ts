@@ -526,6 +526,14 @@ export function registerRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // Allow any authenticated user to push a system notification (e.g. short-rest timer expiry)
+  app.post("/api/notifications", requireAuth, async (req, res) => {
+    const { type = "system", message } = req.body;
+    if (!message) return res.status(400).json({ message: "message is required" });
+    const notif = await storage.createNotification({ type, message });
+    res.status(201).json(notif);
+  });
+
   // ---------- Audit log ----------
   app.get("/api/audit-logs", requireAuth, async (req, res) => {
     if (req.session.role === "receptionist") {
