@@ -65,6 +65,10 @@ export const storage = {
     const [r] = await db.update(receptionists).set(payload).where(eq(receptionists.id, id)).returning();
     return r;
   },
+  async deleteReceptionist(id: string): Promise<boolean> {
+    const result = await db.delete(receptionists).where(eq(receptionists.id, id)).returning();
+    return result.length > 0;
+  },
 
   // Shifts
   async getActiveShiftForReceptionist(receptionistId: string): Promise<Shift | undefined> {

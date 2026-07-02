@@ -62,7 +62,7 @@ export default function Dashboard() {
         { label: "Occupied Rooms", value: summary.occupiedRooms, icon: "🛏️" },
         { label: "Available Rooms", value: summary.availableRooms, icon: "✅" },
         { label: "Reserved Rooms", value: summary.reservedRooms, icon: "📌" },
-        { label: "Total Sales Today", value: `$${summary.totalSalesToday.toFixed(2)}`, icon: "💰" },
+        { label: "Total Sales Today", value: `₦${summary.totalSalesToday.toFixed(2)}`, icon: "💰" },
         { label: "Payments Received", value: summary.paymentsReceived, icon: "💳" },
         { label: "Outstanding Payments", value: summary.outstandingPayments, icon: "⚠️" },
       ]
@@ -90,7 +90,7 @@ export default function Dashboard() {
         <span className={`dot ${shift ? "dot-active" : "dot-inactive"}`} />
         {shift ? (
           <span>
-            Shift active since {new Date(shift.loginTime).toLocaleTimeString()} — Opening balance $
+            Shift active since {new Date(shift.loginTime).toLocaleTimeString()} — Opening balance ₦
             {Number(shift.openingBalance).toFixed(2)}
           </span>
         ) : (
@@ -116,7 +116,7 @@ export default function Dashboard() {
             <h2>Start Shift</h2>
             <p className="page-sub">Enter your opening cash drawer balance to begin.</p>
             <div className="field">
-              <label>Opening Balance ($)</label>
+              <label>Opening Balance (₦)</label>
               <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
             </div>
             {error && <p className="error-text">{error}</p>}
@@ -159,31 +159,31 @@ export default function Dashboard() {
               </div>
               <div>
                 <span>Total Sales</span>
-                <strong>${Number(shift.totalSales).toFixed(2)}</strong>
+                <strong>₦{Number(shift.totalSales).toFixed(2)}</strong>
               </div>
               <div>
                 <span>Cash Sales</span>
-                <strong>${Number(shift.cashSales).toFixed(2)}</strong>
+                <strong>₦{Number(shift.cashSales).toFixed(2)}</strong>
               </div>
               <div>
                 <span>Card Sales</span>
-                <strong>${Number(shift.cardSales).toFixed(2)}</strong>
+                <strong>₦{Number(shift.cardSales).toFixed(2)}</strong>
               </div>
               <div>
                 <span>Transfer Sales</span>
-                <strong>${Number(shift.transferSales).toFixed(2)}</strong>
+                <strong>₦{Number(shift.transferSales).toFixed(2)}</strong>
               </div>
               <div>
                 <span>Discounts Given</span>
-                <strong>${Number(shift.discountsGiven).toFixed(2)}</strong>
+                <strong>₦{Number(shift.discountsGiven).toFixed(2)}</strong>
               </div>
               <div>
                 <span>Refunds Issued</span>
-                <strong>${Number(shift.refundsIssued).toFixed(2)}</strong>
+                <strong>₦{Number(shift.refundsIssued).toFixed(2)}</strong>
               </div>
             </div>
             <div className="field">
-              <label>Closing Balance ($)</label>
+              <label>Closing Balance (₦)</label>
               <input type="number" value={closingBalance} onChange={(e) => setClosingBalance(e.target.value)} />
             </div>
             {error && <p className="error-text">{error}</p>}

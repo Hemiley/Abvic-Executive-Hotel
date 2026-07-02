@@ -17,13 +17,14 @@ export default function Rooms() {
     pricePerNight: "80",
     capacity: "2",
     amenities: "Wi-Fi, TV, AC",
+    imageUrls: [] as string[],
   });
   const [editForm, setEditForm] = useState({
     roomType: "",
     pricePerNight: "",
     capacity: "",
     amenities: "",
-    imageUrl: "",
+    imageUrls: [] as string[],
   });
 
   function load() {
@@ -43,9 +44,11 @@ export default function Rooms() {
         pricePerNight: Number(form.pricePerNight) as any,
         capacity: Number(form.capacity) as any,
         amenities: form.amenities.split(",").map((a) => a.trim()).filter(Boolean) as any,
+        imageUrls: form.imageUrls as any,
+        imageUrl: form.imageUrls[0] || undefined,
       });
       setShowNew(false);
-      setForm({ roomNumber: "", roomType: "Standard Room", pricePerNight: "80", capacity: "2", amenities: "Wi-Fi, TV, AC" });
+      setForm({ roomNumber: "", roomType: "Standard Room", pricePerNight: "80", capacity: "2", amenities: "Wi-Fi, TV, AC", imageUrls: [] });
       load();
     } catch (e: any) {
       setError(e.message);
@@ -63,23 +66,44 @@ export default function Rooms() {
 
   function openEdit(room: Room) {
     setEditing(room);
+    // Merge imageUrls array with legacy imageUrl for backward compat
+    const urls = room.imageUrls && room.imageUrls.length > 0
+      ? room.imageUrls
+      : room.imageUrl ? [room.imageUrl] : [];
     setEditForm({
       roomType: room.roomType,
       pricePerNight: room.pricePerNight,
       capacity: String(room.capacity),
       amenities: room.amenities.join(", "),
-      imageUrl: room.imageUrl || "",
+      imageUrls: urls,
     });
   }
 
-  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function addImage(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "create" | "edit"
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     try {
-      const dataUrl = await fileToResizedDataUrl(file, 480, 0.82);
-      setEditForm((f) => ({ ...f, imageUrl: dataUrl }));
+      const dataUrls = await Promise.all(files.map((f) => fileToResizedDataUrl(f, 480, 0.82)));
+      if (target === "create") {
+        setForm((f) => ({ ...f, imageUrls: [...f.imageUrls, ...dataUrls] }));
+      } else {
+        setEditForm((f) => ({ ...f, imageUrls: [...f.imageUrls, ...dataUrls] }));
+      }
     } catch (err: any) {
       setError(err.message || "Could not process image");
+    }
+    // Reset the input so the same file can be re-selected
+    e.target.value = "";
+  }
+
+  function removeImage(index: number, target: "create" | "edit") {
+    if (target === "create") {
+      setForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== index) }));
+    } else {
+      setEditForm((f) => ({ ...f, imageUrls: f.imageUrls.filter((_, i) => i !== index) }));
     }
   }
 
@@ -93,7 +117,8 @@ export default function Rooms() {
         pricePerNight: Number(editForm.pricePerNight) as any,
         capacity: Number(editForm.capacity) as any,
         amenities: editForm.amenities.split(",").map((a) => a.trim()).filter(Boolean) as any,
-        imageUrl: editForm.imageUrl,
+        imageUrls: editForm.imageUrls as any,
+        imageUrl: editForm.imageUrls[0] || null,
       });
       setEditing(null);
       load();
@@ -121,46 +146,91 @@ export default function Rooms() {
       {error && <p className="error-text">{error}</p>}
 
       <div className="room-grid">
-        {rooms.map((room) => (
-          <div key={room.id} className="room-card glass">
-            <div className="room-image" style={room.imageUrl ? { backgroundImage: `url(${room.imageUrl})` } : undefined}>
-              {!room.imageUrl && (room.roomType.includes("Suite") ? "🏰" : "🛏️")}
-            </div>
-            <div className="room-body">
-              <div className="room-title-row">
-                <strong>{room.roomType}</strong>
-                <span className={`badge status-${room.status}`}>{room.status}</span>
+        {rooms.map((room) => {
+          const primaryImage = (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls[0] : room.imageUrl;
+          return (
+            <div key={room.id} className="room-card glass">
+              <div className="room-image" style={primaryImage ? { backgroundImage: `url(${primaryImage})` } : undefined}>
+                {!primaryImage && (room.roomType.includes("Suite") ? "🏰" : "🛏️")}
               </div>
-              <div className="room-number">Room {room.roomNumber}</div>
-              <div className="room-price">${Number(room.pricePerNight).toFixed(2)} / night</div>
-              <div className="room-amenities">
-                {room.amenities.map((a) => (
-                  <span key={a} className="amenity-chip">
-                    {a}
-                  </span>
-                ))}
-              </div>
-              <div className="room-capacity">👥 Up to {room.capacity} guests</div>
-              <select value={room.status} onChange={(e) => setStatus(room.id, e.target.value)}>
-                <option value="available">Available</option>
-                <option value="occupied">Occupied</option>
-                <option value="reserved">Reserved</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
-              {isAdmin && (
-                <button className="btn secondary full room-edit-btn" onClick={() => openEdit(room)}>
-                  Edit Room
-                </button>
+              {room.imageUrls && room.imageUrls.length > 1 && (
+                <div className="room-thumb-strip">
+                  {room.imageUrls.map((url, i) => (
+                    <div
+                      key={i}
+                      className="room-thumb"
+                      style={{ backgroundImage: `url(${url})` }}
+                    />
+                  ))}
+                </div>
               )}
+              <div className="room-body">
+                <div className="room-title-row">
+                  <strong>{room.roomType}</strong>
+                  <span className={`badge status-${room.status}`}>{room.status}</span>
+                </div>
+                <div className="room-number">Room {room.roomNumber}</div>
+                <div className="room-price">₦{Number(room.pricePerNight).toFixed(2)} / night</div>
+                <div className="room-amenities">
+                  {room.amenities.map((a) => (
+                    <span key={a} className="amenity-chip">
+                      {a}
+                    </span>
+                  ))}
+                </div>
+                <div className="room-capacity">👥 Up to {room.capacity} guests</div>
+                <select value={room.status} onChange={(e) => setStatus(room.id, e.target.value)}>
+                  <option value="available">Available</option>
+                  <option value="occupied">Occupied</option>
+                  <option value="reserved">Reserved</option>
+                  <option value="maintenance">Maintenance</option>
+                </select>
+                {isAdmin && (
+                  <button className="btn secondary full room-edit-btn" onClick={() => openEdit(room)}>
+                    Edit Room
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showNew && (
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
           <form className="modal glass" onClick={(e) => e.stopPropagation()} onSubmit={handleCreate}>
             <h2>Add Room</h2>
+
+            {/* Multi-image upload for new room */}
+            <div className="field">
+              <label>Room Photos</label>
+              <div className="multi-image-grid">
+                {form.imageUrls.map((url, i) => (
+                  <div key={i} className="multi-image-thumb">
+                    <img src={url} alt={`Room photo ${i + 1}`} />
+                    <button
+                      type="button"
+                      className="multi-image-remove"
+                      onClick={() => removeImage(i, "create")}
+                      title="Remove photo"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <label className="multi-image-add">
+                  <span>+ Add Photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => addImage(e, "create")}
+                    hidden
+                  />
+                </label>
+              </div>
+            </div>
+
             <div className="field-row">
               <div className="field">
                 <label>Room Number</label>
@@ -173,7 +243,7 @@ export default function Rooms() {
             </div>
             <div className="field-row">
               <div className="field">
-                <label>Price / Night ($)</label>
+                <label>Price / Night (₦)</label>
                 <input type="number" value={form.pricePerNight} onChange={(e) => setForm({ ...form, pricePerNight: e.target.value })} />
               </div>
               <div className="field">
@@ -201,24 +271,48 @@ export default function Rooms() {
         <div className="modal-overlay" onClick={() => setEditing(null)}>
           <form className="modal glass" onClick={(e) => e.stopPropagation()} onSubmit={handleEditSave}>
             <h2>Edit Room {editing.roomNumber}</h2>
-            <div className="avatar-upload-row">
-              {editForm.imageUrl ? (
-                <img src={editForm.imageUrl} alt="Room preview" className="room-image-preview" />
-              ) : (
-                <div className="room-image-preview room-image-preview-empty">🛏️</div>
+
+            {/* Multi-image management */}
+            <div className="field">
+              <label>Room Photos</label>
+              <div className="multi-image-grid">
+                {editForm.imageUrls.map((url, i) => (
+                  <div key={i} className="multi-image-thumb">
+                    <img src={url} alt={`Room photo ${i + 1}`} />
+                    {i === 0 && <span className="multi-image-primary-badge">Main</span>}
+                    <button
+                      type="button"
+                      className="multi-image-remove"
+                      onClick={() => removeImage(i, "edit")}
+                      title="Remove photo"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <label className="multi-image-add">
+                  <span>+ Add Photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => addImage(e, "edit")}
+                    hidden
+                  />
+                </label>
+              </div>
+              {editForm.imageUrls.length > 0 && (
+                <p className="field-hint">First photo is used as the main card image. Drag to reorder not needed — just remove and re-add.</p>
               )}
-              <label className="btn secondary file-btn">
-                Upload Photo
-                <input type="file" accept="image/*" onChange={handleImageChange} hidden />
-              </label>
             </div>
+
             <div className="field-row">
               <div className="field">
                 <label>Room Name / Type</label>
                 <input value={editForm.roomType} onChange={(e) => setEditForm({ ...editForm, roomType: e.target.value })} required />
               </div>
               <div className="field">
-                <label>Price / Night ($)</label>
+                <label>Price / Night (₦)</label>
                 <input
                   type="number"
                   value={editForm.pricePerNight}

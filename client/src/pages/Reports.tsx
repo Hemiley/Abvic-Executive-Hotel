@@ -19,7 +19,7 @@ export default function Reports() {
         { label: "Guest Check-ins", value: summary.checkIns },
         { label: "Guest Check-outs", value: summary.checkOuts },
         { label: "Occupancy Rate", value: `${summary.occupancyRate}%` },
-        { label: "Revenue Summary", value: `$${summary.totalRevenue.toFixed(2)}` },
+        { label: "Revenue Summary", value: `₦${summary.totalRevenue.toFixed(2)}` },
       ]
     : [];
 

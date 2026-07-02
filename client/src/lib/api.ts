@@ -27,6 +27,7 @@ export type Room = {
   capacity: number;
   amenities: string[];
   imageUrl: string | null;
+  imageUrls: string[];
   status: "available" | "occupied" | "reserved" | "maintenance";
 };
 
@@ -183,6 +184,7 @@ export const api = {
     id: string,
     data: Partial<{ fullName: string; email: string; role: string; avatarUrl: string; active: boolean; password: string }>
   ) => request<Staff>(`/api/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteStaff: (id: string) => request<void>(`/api/staff/${id}`, { method: "DELETE" }),
 
   getSettings: () => request<HotelSettings>("/api/settings"),
   updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string }>) =>

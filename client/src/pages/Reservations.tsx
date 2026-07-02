@@ -188,7 +188,7 @@ export default function Reservations() {
                 </select>
               </div>
               <div className="field">
-                <label>Amount ($)</label>
+                <label>Amount (₦)</label>
                 <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
               </div>
             </div>
@@ -232,7 +232,7 @@ export default function Reservations() {
             </div>
             <div className="receipt-row">
               <span>Amount</span>
-              <strong>${Number(receiptData.payment.amount).toFixed(2)}</strong>
+              <strong>₦{Number(receiptData.payment.amount).toFixed(2)}</strong>
             </div>
             <div className="receipt-row">
               <span>Method</span>

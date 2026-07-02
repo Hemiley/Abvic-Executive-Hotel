@@ -23,18 +23,29 @@ declare module "express-session" {
   }
 }
 
-function requireAuth(req: Request, res: Response, next: NextFunction) {
+async function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) {
     return res.status(401).json({ message: "Not authenticated" });
+  }
+  // Verify the account still exists and is active (guards against deleted/deactivated users)
+  const user = await storage.getReceptionistById(req.session.receptionistId);
+  if (!user || !user.active) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
   }
   next();
 }
 
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  if (req.session.role !== "admin") {
+  const user = await storage.getReceptionistById(req.session.receptionistId);
+  if (!user || !user.active) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ message: "Session invalid — account deleted or disabled" });
+  }
+  if (user.role !== "admin") {
     return res.status(403).json({ message: "Admin access required" });
   }
   next();
@@ -151,6 +162,24 @@ export function registerRoutes(app: Express) {
       active: created.active,
       createdAt: created.createdAt,
     });
+  });
+
+  app.delete("/api/staff/:id", requireAdmin, async (req, res) => {
+    const targetId = req.params.id;
+    // Prevent self-deletion
+    if (targetId === req.session.receptionistId) {
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+    const target = await storage.getReceptionistById(targetId);
+    if (!target) return res.status(404).json({ message: "Staff member not found" });
+    await storage.deleteReceptionist(targetId);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "staff_deleted",
+      details: `Deleted ${target.role} account for ${target.fullName} (${target.username})`,
+    });
+    res.status(204).end();
   });
 
   app.patch("/api/staff/:id", requireAdmin, async (req, res) => {

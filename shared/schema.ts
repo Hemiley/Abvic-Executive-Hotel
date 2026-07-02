@@ -43,6 +43,7 @@ export const rooms = pgTable("rooms", {
   capacity: integer("capacity").notNull().default(2),
   amenities: jsonb("amenities").notNull().default([]),
   imageUrl: text("image_url"),
+  imageUrls: jsonb("image_urls").notNull().default([]),
   status: text("status").notNull().default("available"), // available | occupied | reserved | maintenance
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -133,7 +134,8 @@ export const insertRoomSchema = z.object({
   pricePerNight: z.number().min(0),
   capacity: z.number().min(1).default(2),
   amenities: z.array(z.string()).default([]),
-  imageUrl: z.string().optional(),
+  imageUrl: z.string().nullable().optional(),
+  imageUrls: z.array(z.string()).default([]),
   status: z.enum(["available", "occupied", "reserved", "maintenance"]).default("available"),
 });
 

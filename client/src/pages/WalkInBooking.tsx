@@ -170,7 +170,7 @@ export default function WalkInBooking() {
                       <span className="badge status-available">Available</span>
                     </div>
                     <div className="room-number">Room {room.roomNumber}</div>
-                    <div className="room-price">${Number(room.pricePerNight).toFixed(2)} / night</div>
+                    <div className="room-price">₦{Number(room.pricePerNight).toFixed(2)} / night</div>
                     <div className="room-amenities">
                       {room.amenities.map((a) => (
                         <span key={a} className="amenity-chip">

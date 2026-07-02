@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Staff as StaffMember } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import { fileToResizedDataUrl } from "../lib/image";
 
 const emptyCreateForm = {
@@ -12,10 +13,12 @@ const emptyCreateForm = {
 };
 
 export default function Staff() {
+  const { user } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [editForm, setEditForm] = useState({
     fullName: "",
@@ -26,6 +29,7 @@ export default function Staff() {
     password: "",
   });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function load() {
     api.getStaff().then(setStaff).catch((e) => setError(e.message));
@@ -106,6 +110,23 @@ export default function Staff() {
     }
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setError("");
+    setDeleting(true);
+    try {
+      await api.deleteStaff(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const isSelf = (member: StaffMember) => member.id === user?.id;
+
   return (
     <div>
       <div className="page-header">
@@ -143,7 +164,7 @@ export default function Staff() {
                     <div className="avatar">{member.fullName.charAt(0)}</div>
                   )}
                 </td>
-                <td>{member.fullName}</td>
+                <td>{member.fullName}{isSelf(member) && <span className="muted" style={{ marginLeft: 6 }}>(you)</span>}</td>
                 <td className="muted">{member.username}</td>
                 <td className="muted">{member.email || "—"}</td>
                 <td>
@@ -159,6 +180,15 @@ export default function Staff() {
                     <button className="btn secondary" onClick={() => openEdit(member)}>
                       Edit
                     </button>
+                    {!isSelf(member) && (
+                      <button
+                        className="btn danger"
+                        onClick={() => setDeleteTarget(member)}
+                        title="Delete staff account"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -171,6 +201,29 @@ export default function Staff() {
           </tbody>
         </table>
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal glass" onClick={(e) => e.stopPropagation()}>
+            <h2>Delete Staff Account</h2>
+            <p style={{ margin: "12px 0 20px" }}>
+              Are you sure you want to permanently delete{" "}
+              <strong>{deleteTarget.fullName}</strong> ({deleteTarget.username})?
+              This action cannot be undone.
+            </p>
+            {error && <p className="error-text">{error}</p>}
+            <div className="modal-actions">
+              <button className="btn secondary" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </button>
+              <button className="btn danger" onClick={handleDelete} disabled={deleting}>
+                {deleting ? "Deleting..." : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNew && (
         <div className="modal-overlay" onClick={() => setShowNew(false)}>
