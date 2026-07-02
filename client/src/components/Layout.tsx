@@ -1,0 +1,117 @@
+import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
+import { useAuth } from "../context/AuthContext";
+import { api, type Notification } from "../lib/api";
+
+const NAV_ITEMS = [
+  { to: "/dashboard", label: "Dashboard", icon: "🏨" },
+  { to: "/walk-in", label: "Walk-in Booking", icon: "🛎️" },
+  { to: "/reservations", label: "Reservations", icon: "📋" },
+  { to: "/rooms", label: "Rooms", icon: "🚪" },
+  { to: "/reports", label: "Reports", icon: "📊" },
+  { to: "/audit-log", label: "Audit Log", icon: "🔒", roles: ["admin", "supervisor"] },
+];
+
+export default function Layout({ children }: { children: ReactNode }) {
+  const { user, shift, logout } = useAuth();
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(
+    (localStorage.getItem("theme") as "dark" | "light") || "dark"
+  );
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    function load() {
+      api.getNotifications().then(setNotifications).catch(() => {});
+    }
+    load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function handleLogout() {
+    await logout();
+    navigate("/login");
+  }
+
+  const unread = notifications.filter((n) => !n.read).length;
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar glass">
+        <div className="brand">
+          <span className="brand-icon">✨</span>
+          <span>Grand Hotel</span>
+        </div>
+        <nav>
+          {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role || "")).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="shift-pill">
+          <span className={`dot ${shift ? "dot-active" : "dot-inactive"}`} />
+          Shift {shift ? "Active" : "Closed"}
+        </div>
+      </aside>
+
+      <div className="main-col">
+        <header className="topbar glass">
+          <div className="topbar-title">Receptionist Console</div>
+          <div className="topbar-actions">
+            <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+            <div className="notif-wrap">
+              <button className="icon-btn" onClick={() => setShowNotifs((s) => !s)}>
+                🔔
+                {unread > 0 && <span className="notif-badge">{unread}</span>}
+              </button>
+              {showNotifs && (
+                <div className="notif-dropdown glass">
+                  <div className="notif-header">Notifications</div>
+                  {notifications.length === 0 && <div className="notif-empty">No notifications yet</div>}
+                  {notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`notif-item ${n.read ? "" : "unread"}`}
+                      onClick={() => api.markNotificationRead(n.id).then(() =>
+                        setNotifications((prev) => prev.map((p) => (p.id === n.id ? { ...p, read: true } : p)))
+                      )}
+                    >
+                      <div className="notif-msg">{n.message}</div>
+                      <div className="notif-time">{new Date(n.createdAt).toLocaleTimeString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="user-chip">
+              <div className="avatar">{user?.fullName?.charAt(0) || "R"}</div>
+              <div>
+                <div className="user-name">{user?.fullName}</div>
+                <div className="user-role">{user?.role}</div>
+              </div>
+            </div>
+            <button className="btn secondary" onClick={handleLogout}>
+              Log out
+            </button>
+          </div>
+        </header>
+        <main className="content">{children}</main>
+      </div>
+    </div>
+  );
+}

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-export default function AdminLogin() {
+export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -16,7 +16,7 @@ export default function AdminLogin() {
     setSubmitting(true);
     try {
       await login(username, password);
-      navigate("/admin");
+      navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -26,20 +26,33 @@ export default function AdminLogin() {
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <h1>Super Admin Login</h1>
+      <div className="login-decor" />
+      <form className="login-card glass" onSubmit={handleSubmit}>
+        <div className="login-brand">✨ Grand Hotel</div>
+        <h1>Receptionist Login</h1>
+        <p className="login-sub">Sign in to access the front desk console</p>
         <div className="field">
           <label>Username</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
         </div>
         <div className="field">
           <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
+        <button className="btn full" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
+        <div className="login-footer">
+          <a href="#" onClick={(e) => e.preventDefault()}>
+            Forgot password?
+          </a>
+        </div>
       </form>
     </div>
   );

@@ -1,1 +1,3 @@
 - [Drizzle version pinning](drizzle-zod-compat.md) — drizzle-zod can break at runtime if its version drifts from drizzle-orm; prefer hand-written zod schemas for simple CRUD to avoid the coupling entirely.
+- [drizzle-kit push interactive prompts](drizzle-kit-push-prompts.md) — when replacing a schema wholesale, drop old/unrelated tables first or the rename-detection prompt blocks non-interactively piped runs.
+- [Standalone seed scripts need a main-module guard](standalone-script-entrypoints.md) — exporting an async setup function from a script without an `if (isMainModule)` invocation block makes `tsx script.ts` silently no-op.

@@ -1,25 +1,31 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "../lib/api";
+import { api, type Shift } from "../lib/api";
 
-type AuthUser = { id: string; username: string } | null;
+type AuthUser = { id: string; username: string; fullName: string; role: string } | null;
 
 type AuthContextValue = {
   user: AuthUser;
+  shift: Shift | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshShift: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser>(null);
+  const [shift, setShift] = useState<Shift | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
       .me()
-      .then(setUser)
+      .then((res) => {
+        setUser(res);
+        setShift(res.shift);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -27,15 +33,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(username: string, password: string) {
     const result = await api.login(username, password);
     setUser(result);
+    setShift(result.shift);
   }
 
   async function logout() {
     await api.logout();
     setUser(null);
+    setShift(null);
+  }
+
+  async function refreshShift() {
+    const current = await api.getCurrentShift();
+    setShift(current);
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, shift, loading, login, logout, refreshShift }}>
       {children}
     </AuthContext.Provider>
   );

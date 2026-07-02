@@ -1,0 +1,253 @@
+Design and develop a modern, responsive, and secure Receptionist Dashboard for a luxury hotel management system. The dashboard should enable receptionists to efficiently manage guest check-ins, room bookings, reservations, payments, and shift operations. The interface should follow 2027 UI/UX standards, featuring a clean design, glassmorphism, smooth animations, and an intuitive workflow.
+
+Receptionist Authentication
+
+Create a secure login system specifically for receptionists.
+
+Features:
+
+Receptionist Login
+Forgot Password
+Two-Factor Authentication (Optional)
+Role-Based Access
+Shift Status (Active/Closed)
+
+Only authenticated receptionists should have access to the dashboard.
+
+Dashboard Overview
+
+After login, display a professional dashboard containing:
+
+Active Shift Status
+Today's Check-ins
+Today's Check-outs
+Walk-in Guests
+Pending Reservations
+Occupied Rooms
+Available Rooms
+Reserved Rooms
+Total Sales Today
+Payments Received
+Outstanding Payments
+Notifications
+Walk-in Guest Booking
+
+Allow receptionists to book rooms immediately for guests who walk into the hotel.
+
+Guest Information:
+
+Full Name
+Phone Number
+Email Address
+Nationality
+ID Type
+ID Number
+Home Address
+Emergency Contact
+
+Booking Details:
+
+Check-in Date
+Check-out Date
+Number of Guests
+Room Type
+Room Number
+Special Requests
+
+Room Selection:
+
+Display available rooms showing:
+
+Room Image
+Room Type
+Price Per Night
+Amenities
+Capacity
+Availability Status
+
+Each room should have:
+
+Book Now Button
+
+Once confirmed:
+
+Room status changes to Occupied
+Booking record is saved
+Receipt is generated
+Guest receives confirmation via email or SMS
+Reservation Management
+
+Receptionists should be able to:
+
+View all reservations
+Search reservations
+Approve confirmed reservations
+Modify reservations
+Cancel reservations
+Assign rooms
+Check guests in
+Check guests out
+
+Reservation Status:
+
+Pending
+Confirmed
+Checked-In
+Checked-Out
+Cancelled
+Payment Module
+
+Support multiple payment methods:
+
+Cash
+POS
+Bank Transfer
+Credit/Debit Card
+Flutterwave
+Paystack
+Stripe
+
+Generate:
+
+Invoice
+Payment Receipt
+
+Record:
+
+Payment Time
+Receptionist Name
+Payment Method
+Transaction ID
+Shift Management System
+
+Every receptionist must operate under an individual shift.
+
+Shift Start
+
+When a receptionist logs in:
+
+Start Shift
+Record Login Time
+Record Receptionist Name
+Record Opening Balance (Cash Drawer)
+Mark Shift as Active
+Shift Operations
+
+During the shift, the system should automatically record:
+
+Walk-in Bookings
+Reservations Processed
+Room Changes
+Guest Check-ins
+Guest Check-outs
+Payments Received
+Refunds Issued
+Discounts Applied
+Additional Services Sold
+Total Revenue
+Cash Transactions
+Card Transactions
+Bank Transfers
+
+Every transaction should be linked to the receptionist currently on duty.
+
+Shift Closing (After 24 Hours)
+
+At the end of the shift (or when the receptionist finishes duty), the system should require the receptionist to Close Shift.
+
+The system should automatically generate a Shift Summary containing:
+
+Receptionist Name
+Shift Date
+Login Time
+Logout Time
+Total Working Hours
+Number of Guests Served
+Number of Rooms Booked
+Reservations Processed
+Total Sales
+Cash Sales
+Card Sales
+Transfer Payments
+Discounts Given
+Refunds
+Closing Balance
+Cash Variance (if any)
+
+The receptionist must review and confirm the report before closing the shift.
+
+Shift Handover
+
+Once the shift is closed:
+
+Lock the previous shift
+Prevent further edits
+Archive all shift records
+Generate a printable Shift Report
+Allow the next receptionist to log in and start a new shift
+Ensure each receptionist can only view and manage transactions recorded during their own active shift, while supervisors and administrators have access to all historical records.
+Sales & Audit Trail
+
+Maintain a complete audit log of:
+
+Bookings
+Reservations
+Payments
+Room Changes
+Guest Information Updates
+Discounts
+Refunds
+Shift Closures
+
+Each log should include:
+
+Date & Time
+Receptionist
+Action Performed
+Device/IP Address (optional)
+
+The audit log should be immutable to support accountability and financial reconciliation.
+
+Reports
+
+Receptionists should be able to generate reports for:
+
+Daily Sales
+Daily Bookings
+Daily Reservations
+Guest Check-ins
+Guest Check-outs
+Occupancy Rate
+Revenue Summary
+Shift Report
+
+Export reports as:
+
+PDF
+Excel
+CSV
+Notifications
+
+Notify receptionists of:
+
+New Reservation
+Pending Approval
+Guest Arrival
+Guest Departure
+Room Ready
+Payment Received
+Shift Ending Soon
+UI/UX Design
+
+Use a premium 2027 hotel dashboard design featuring:
+
+Glassmorphism
+Soft Shadows
+Rounded Cards
+Smooth Animations
+Dark Mode & Light Mode
+Mobile Responsive Layout
+Professional Icons
+Color-Coded Room Status
+Fast Search & Filters
+Real-Time Updates
