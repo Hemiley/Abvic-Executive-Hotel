@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
+import { NotificationsProvider } from "./context/NotificationsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -11,6 +12,7 @@ import Reports from "./pages/Reports";
 import AuditLog from "./pages/AuditLog";
 import Staff from "./pages/Staff";
 import HotelSettings from "./pages/HotelSettings";
+import NotificationsPage from "./pages/Notifications";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
@@ -89,6 +91,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
@@ -99,7 +109,9 @@ export default function App() {
     <BrowserRouter>
       <SettingsProvider>
         <AuthProvider>
-          <AppRoutes />
+          <NotificationsProvider>
+            <AppRoutes />
+          </NotificationsProvider>
         </AuthProvider>
       </SettingsProvider>
     </BrowserRouter>
