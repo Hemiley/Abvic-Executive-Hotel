@@ -368,6 +368,11 @@ select {
   cursor: pointer;
 }
 
+select option {
+  background: #1a1f2e;
+  color: #e2e8f0;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
