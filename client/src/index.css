@@ -190,66 +190,98 @@ h2 {
 
 .notif-wrap {
   position: relative;
+  isolation: isolate;
 }
 
 .notif-badge {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: -2px;
+  right: -2px;
   background: var(--danger);
   color: #fff;
   font-size: 10px;
   border-radius: 999px;
   padding: 1px 5px;
+  pointer-events: none;
 }
 
 .notif-dropdown {
-  position: fixed;
-  right: 16px;
-  top: 64px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
   width: 320px;
-  max-height: 420px;
+  max-height: 440px;
   overflow-y: auto;
-  z-index: 1000;
-  padding: 8px;
-  background: #1a1f2e;
-  border: 1px solid var(--glass-border);
+  z-index: 9999;
+  padding: 6px;
+  background: var(--notif-bg, #16192a);
+  border: 1px solid rgba(124, 139, 255, 0.25);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255,255,255,0.04);
+  /* Animate in */
+  animation: notifSlideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .notif-dropdown {
+  --notif-bg: #ffffff;
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes notifSlideIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .notif-header {
   font-weight: 600;
   font-size: 13px;
-  padding: 8px;
+  padding: 10px 12px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 4px;
+}
+
+.notif-header-badge {
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(124, 139, 255, 0.2);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 .notif-empty {
-  padding: 16px;
+  padding: 24px 16px;
   color: var(--muted);
   font-size: 13px;
   text-align: center;
 }
 
 .notif-item {
-  padding: 10px;
+  padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
   font-size: 13px;
+  transition: background 0.15s;
 }
 
 .notif-item.unread {
-  background: rgba(124, 139, 255, 0.12);
+  background: rgba(124, 139, 255, 0.1);
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
 }
 
 .notif-item:hover {
-  background: rgba(124, 139, 255, 0.2);
+  background: rgba(124, 139, 255, 0.18);
 }
 
 .notif-time {
   font-size: 11px;
   color: var(--muted);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .user-chip {
