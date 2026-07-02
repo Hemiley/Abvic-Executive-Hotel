@@ -8,6 +8,7 @@ import {
   payments,
   auditLogs,
   notifications,
+  hotelSettings,
   type Receptionist,
   type Shift,
   type Room,
@@ -16,10 +17,12 @@ import {
   type Payment,
   type AuditLog,
   type Notification,
+  type HotelSettings,
   type InsertRoom,
   type UpdateRoom,
   type CreateReceptionist,
   type UpdateReceptionist,
+  type UpdateHotelSettings,
 } from "@shared/schema";
 import { eq, desc, and, isNull } from "drizzle-orm";
 
@@ -251,5 +254,22 @@ export const storage = {
   },
   async markNotificationRead(id: string) {
     await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+  },
+
+  // Hotel settings
+  async getHotelSettings(): Promise<HotelSettings> {
+    const [row] = await db.select().from(hotelSettings).limit(1);
+    if (row) return row;
+    const [created] = await db.insert(hotelSettings).values({}).returning();
+    return created;
+  },
+  async updateHotelSettings(data: UpdateHotelSettings): Promise<HotelSettings> {
+    const existing = await this.getHotelSettings();
+    const [updated] = await db
+      .update(hotelSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(hotelSettings.id, existing.id))
+      .returning();
+    return updated;
   },
 };

@@ -53,6 +53,8 @@ export async function seedAdmin() {
       await storage.createRoom(room as any);
     }
   }
+
+  await storage.getHotelSettings();
 }
 
 const isMainModule = process.argv[1] && process.argv[1].endsWith("seed.ts");

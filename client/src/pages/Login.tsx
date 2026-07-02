@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -8,6 +9,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
@@ -28,7 +30,14 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-decor" />
       <form className="login-card glass" onSubmit={handleSubmit}>
-        <div className="login-brand">✨ Grand Hotel</div>
+        <div className="login-brand">
+          {settings?.logoUrl ? (
+            <img src={settings.logoUrl} alt="Hotel logo" className="login-brand-logo" />
+          ) : (
+            "✨"
+          )}{" "}
+          {settings?.hotelName || "Grand Hotel"}
+        </div>
         <h1>Receptionist Login</h1>
         <p className="login-sub">Sign in to access the front desk console</p>
         <div className="field">

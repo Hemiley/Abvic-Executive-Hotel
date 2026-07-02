@@ -1,16 +1,29 @@
 import { useEffect, useState } from "react";
 import { api, type Room } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { fileToResizedDataUrl } from "../lib/image";
 
 export default function Rooms() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [rooms, setRooms] = useState<Room[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<Room | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     roomNumber: "",
     roomType: "Standard Room",
     pricePerNight: "80",
     capacity: "2",
     amenities: "Wi-Fi, TV, AC",
+  });
+  const [editForm, setEditForm] = useState({
+    roomType: "",
+    pricePerNight: "",
+    capacity: "",
+    amenities: "",
+    imageUrl: "",
   });
 
   function load() {
@@ -48,6 +61,49 @@ export default function Rooms() {
     }
   }
 
+  function openEdit(room: Room) {
+    setEditing(room);
+    setEditForm({
+      roomType: room.roomType,
+      pricePerNight: room.pricePerNight,
+      capacity: String(room.capacity),
+      amenities: room.amenities.join(", "),
+      imageUrl: room.imageUrl || "",
+    });
+  }
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(file, 480, 0.82);
+      setEditForm((f) => ({ ...f, imageUrl: dataUrl }));
+    } catch (err: any) {
+      setError(err.message || "Could not process image");
+    }
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    try {
+      await api.updateRoom(editing.id, {
+        roomType: editForm.roomType,
+        pricePerNight: Number(editForm.pricePerNight) as any,
+        capacity: Number(editForm.capacity) as any,
+        amenities: editForm.amenities.split(",").map((a) => a.trim()).filter(Boolean) as any,
+        imageUrl: editForm.imageUrl,
+      });
+      setEditing(null);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -55,9 +111,11 @@ export default function Rooms() {
           <h1>Room Management</h1>
           <p className="page-sub">Color-coded room status across the property</p>
         </div>
-        <button className="btn" onClick={() => setShowNew(true)}>
-          + Add Room
-        </button>
+        {isAdmin && (
+          <button className="btn" onClick={() => setShowNew(true)}>
+            + Add Room
+          </button>
+        )}
       </div>
 
       {error && <p className="error-text">{error}</p>}
@@ -65,7 +123,9 @@ export default function Rooms() {
       <div className="room-grid">
         {rooms.map((room) => (
           <div key={room.id} className="room-card glass">
-            <div className="room-image">{room.roomType.includes("Suite") ? "🏰" : "🛏️"}</div>
+            <div className="room-image" style={room.imageUrl ? { backgroundImage: `url(${room.imageUrl})` } : undefined}>
+              {!room.imageUrl && (room.roomType.includes("Suite") ? "🏰" : "🛏️")}
+            </div>
             <div className="room-body">
               <div className="room-title-row">
                 <strong>{room.roomType}</strong>
@@ -87,6 +147,11 @@ export default function Rooms() {
                 <option value="reserved">Reserved</option>
                 <option value="maintenance">Maintenance</option>
               </select>
+              {isAdmin && (
+                <button className="btn secondary full room-edit-btn" onClick={() => openEdit(room)}>
+                  Edit Room
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -126,6 +191,55 @@ export default function Rooms() {
               </button>
               <button type="submit" className="btn">
                 Add Room
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <form className="modal glass" onClick={(e) => e.stopPropagation()} onSubmit={handleEditSave}>
+            <h2>Edit Room {editing.roomNumber}</h2>
+            <div className="avatar-upload-row">
+              {editForm.imageUrl ? (
+                <img src={editForm.imageUrl} alt="Room preview" className="room-image-preview" />
+              ) : (
+                <div className="room-image-preview room-image-preview-empty">🛏️</div>
+              )}
+              <label className="btn secondary file-btn">
+                Upload Photo
+                <input type="file" accept="image/*" onChange={handleImageChange} hidden />
+              </label>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Room Name / Type</label>
+                <input value={editForm.roomType} onChange={(e) => setEditForm({ ...editForm, roomType: e.target.value })} required />
+              </div>
+              <div className="field">
+                <label>Price / Night ($)</label>
+                <input
+                  type="number"
+                  value={editForm.pricePerNight}
+                  onChange={(e) => setEditForm({ ...editForm, pricePerNight: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label>Capacity</label>
+              <input type="number" value={editForm.capacity} onChange={(e) => setEditForm({ ...editForm, capacity: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Amenities (comma separated)</label>
+              <input value={editForm.amenities} onChange={(e) => setEditForm({ ...editForm, amenities: e.target.value })} />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn secondary" onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn" disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </form>

@@ -1,0 +1,314 @@
+import { useEffect, useState } from "react";
+import { api, type Staff as StaffMember } from "../lib/api";
+import { fileToResizedDataUrl } from "../lib/image";
+
+const emptyCreateForm = {
+  username: "",
+  password: "",
+  fullName: "",
+  email: "",
+  role: "receptionist",
+  avatarUrl: "",
+};
+
+export default function Staff() {
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [error, setError] = useState("");
+  const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    email: "",
+    role: "receptionist",
+    avatarUrl: "",
+    active: true,
+    password: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    api.getStaff().then(setStaff).catch((e) => setError(e.message));
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>, target: "create" | "edit") {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(file, 300, 0.85);
+      if (target === "create") setCreateForm((f) => ({ ...f, avatarUrl: dataUrl }));
+      else setEditForm((f) => ({ ...f, avatarUrl: dataUrl }));
+    } catch (err: any) {
+      setError(err.message || "Could not process image");
+    }
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      await api.createStaff({
+        username: createForm.username,
+        password: createForm.password,
+        fullName: createForm.fullName,
+        email: createForm.email || undefined,
+        role: createForm.role,
+        avatarUrl: createForm.avatarUrl || undefined,
+      });
+      setShowNew(false);
+      setCreateForm(emptyCreateForm);
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEdit(member: StaffMember) {
+    setEditing(member);
+    setEditForm({
+      fullName: member.fullName,
+      email: member.email || "",
+      role: member.role,
+      avatarUrl: member.avatarUrl || "",
+      active: member.active,
+      password: "",
+    });
+  }
+
+  async function handleEditSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setError("");
+    setSaving(true);
+    try {
+      const payload: Record<string, any> = {
+        fullName: editForm.fullName,
+        email: editForm.email,
+        role: editForm.role,
+        avatarUrl: editForm.avatarUrl,
+        active: editForm.active,
+      };
+      if (editForm.password) payload.password = editForm.password;
+      await api.updateStaff(editing.id, payload);
+      setEditing(null);
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Staff Management</h1>
+          <p className="page-sub">Create receptionist accounts and manage staff profiles</p>
+        </div>
+        <button className="btn" onClick={() => setShowNew(true)}>
+          + Add Staff
+        </button>
+      </div>
+
+      {error && <p className="error-text">{error}</p>}
+
+      <div className="card glass">
+        <table className="table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {staff.map((member) => (
+              <tr key={member.id}>
+                <td>
+                  {member.avatarUrl ? (
+                    <img src={member.avatarUrl} alt={member.fullName} className="avatar-img" />
+                  ) : (
+                    <div className="avatar">{member.fullName.charAt(0)}</div>
+                  )}
+                </td>
+                <td>{member.fullName}</td>
+                <td className="muted">{member.username}</td>
+                <td className="muted">{member.email || "—"}</td>
+                <td>
+                  <span className="badge status-confirmed">{member.role}</span>
+                </td>
+                <td>
+                  <span className={`badge ${member.active ? "status-available" : "status-cancelled"}`}>
+                    {member.active ? "Active" : "Disabled"}
+                  </span>
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button className="btn secondary" onClick={() => openEdit(member)}>
+                      Edit
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {staff.length === 0 && (
+              <tr>
+                <td colSpan={7}>No staff members yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showNew && (
+        <div className="modal-overlay" onClick={() => setShowNew(false)}>
+          <form className="modal glass" onClick={(e) => e.stopPropagation()} onSubmit={handleCreate}>
+            <h2>Add Staff Account</h2>
+            <div className="avatar-upload-row">
+              {createForm.avatarUrl ? (
+                <img src={createForm.avatarUrl} alt="Avatar preview" className="avatar-img large" />
+              ) : (
+                <div className="avatar large">{createForm.fullName.charAt(0) || "?"}</div>
+              )}
+              <label className="btn secondary file-btn">
+                Upload Photo
+                <input type="file" accept="image/*" onChange={(e) => handleAvatarChange(e, "create")} hidden />
+              </label>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Full Name</label>
+                <input
+                  value={createForm.fullName}
+                  onChange={(e) => setCreateForm({ ...createForm, fullName: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Role</label>
+                <select value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}>
+                  <option value="receptionist">Receptionist</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Username</label>
+                <input
+                  value={createForm.username}
+                  onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
+                  required
+                  minLength={3}
+                />
+              </div>
+              <div className="field">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label>Email (optional)</label>
+              <input
+                type="email"
+                value={createForm.email}
+                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn secondary" onClick={() => setShowNew(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn" disabled={saving}>
+                {saving ? "Saving..." : "Create Account"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(null)}>
+          <form className="modal glass" onClick={(e) => e.stopPropagation()} onSubmit={handleEditSave}>
+            <h2>Edit {editing.fullName}</h2>
+            <div className="avatar-upload-row">
+              {editForm.avatarUrl ? (
+                <img src={editForm.avatarUrl} alt="Avatar preview" className="avatar-img large" />
+              ) : (
+                <div className="avatar large">{editForm.fullName.charAt(0) || "?"}</div>
+              )}
+              <label className="btn secondary file-btn">
+                Change Photo
+                <input type="file" accept="image/*" onChange={(e) => handleAvatarChange(e, "edit")} hidden />
+              </label>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Full Name</label>
+                <input value={editForm.fullName} onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })} required />
+              </div>
+              <div className="field">
+                <label>Role</label>
+                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+                  <option value="receptionist">Receptionist</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>New Password (leave blank to keep current)</label>
+              <input
+                type="password"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                minLength={6}
+              />
+            </div>
+            <div className="field checkbox-field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editForm.active}
+                  onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })}
+                />{" "}
+                Account active
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn secondary" onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn" disabled={saving}>
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

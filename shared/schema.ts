@@ -106,6 +106,13 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const hotelSettings = pgTable("hotel_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  hotelName: text("hotel_name").notNull().default("Grand Hotel"),
+  logoUrl: text("logo_url"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -178,6 +185,11 @@ export const createReceptionistSchema = z.object({
   avatarUrl: z.string().optional(),
 });
 
+export const updateHotelSettingsSchema = z.object({
+  hotelName: z.string().min(1).optional(),
+  logoUrl: z.string().optional(),
+});
+
 export const updateReceptionistSchema = z.object({
   fullName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal("")),
@@ -195,6 +207,7 @@ export type Reservation = typeof reservations.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type HotelSettings = typeof hotelSettings.$inferSelect;
 export type InsertRoom = z.infer<typeof insertRoomSchema>;
 export type UpdateRoom = z.infer<typeof updateRoomSchema>;
 export type CreateBooking = z.infer<typeof createBookingSchema>;
@@ -202,3 +215,4 @@ export type UpdateReservation = z.infer<typeof updateReservationSchema>;
 export type CreatePayment = z.infer<typeof createPaymentSchema>;
 export type CreateReceptionist = z.infer<typeof createReceptionistSchema>;
 export type UpdateReceptionist = z.infer<typeof updateReceptionistSchema>;
+export type UpdateHotelSettings = z.infer<typeof updateHotelSettingsSchema>;

@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
 import { api, type Notification } from "../lib/api";
 
 const NAV_ITEMS = [
@@ -10,10 +11,13 @@ const NAV_ITEMS = [
   { to: "/rooms", label: "Rooms", icon: "🚪" },
   { to: "/reports", label: "Reports", icon: "📊" },
   { to: "/audit-log", label: "Audit Log", icon: "🔒", roles: ["admin", "supervisor"] },
+  { to: "/staff", label: "Staff Management", icon: "🧑‍💼", roles: ["admin"] },
+  { to: "/settings", label: "Hotel Settings", icon: "⚙️", roles: ["admin"] },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, shift, logout } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -46,8 +50,12 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar glass">
         <div className="brand">
-          <span className="brand-icon">✨</span>
-          <span>Grand Hotel</span>
+          {settings?.logoUrl ? (
+            <img src={settings.logoUrl} alt="Hotel logo" className="brand-logo" />
+          ) : (
+            <span className="brand-icon">✨</span>
+          )}
+          <span>{settings?.hotelName || "Grand Hotel"}</span>
         </div>
         <nav>
           {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role || "")).map((item) => (

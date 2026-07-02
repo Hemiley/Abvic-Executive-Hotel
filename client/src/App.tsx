@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { SettingsProvider } from "./context/SettingsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -8,11 +9,14 @@ import Reservations from "./pages/Reservations";
 import Rooms from "./pages/Rooms";
 import Reports from "./pages/Reports";
 import AuditLog from "./pages/AuditLog";
+import Staff from "./pages/Staff";
+import HotelSettings from "./pages/HotelSettings";
 
-function ProtectedRoute({ children }: { children: JSX.Element }) {
+function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -69,6 +73,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/staff"
+        element={
+          <ProtectedRoute adminOnly>
+            <Staff />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute adminOnly>
+            <HotelSettings />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
@@ -77,9 +97,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <SettingsProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </SettingsProvider>
     </BrowserRouter>
   );
 }

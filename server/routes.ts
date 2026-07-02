@@ -12,6 +12,7 @@ import {
   createPaymentSchema,
   createReceptionistSchema,
   updateReceptionistSchema,
+  updateHotelSettingsSchema,
 } from "@shared/schema";
 
 declare module "express-session" {
@@ -508,6 +509,24 @@ export function registerRoutes(app: Express) {
       occupancyRate: roomsList.length ? Math.round((occupied / roomsList.length) * 100) : 0,
       totalRevenue,
     });
+  });
+
+  // ---------- Hotel Settings ----------
+  app.get("/api/settings", async (_req, res) => {
+    res.json(await storage.getHotelSettings());
+  });
+
+  app.patch("/api/settings", requireAdmin, async (req, res) => {
+    const parsed = updateHotelSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const updated = await storage.updateHotelSettings(parsed.data);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "hotel_settings_updated",
+      details: `Updated: ${Object.keys(parsed.data).join(", ")}`,
+    });
+    res.json(updated);
   });
 
   app.get("/api/reports/export.csv", requireAuth, async (_req, res) => {

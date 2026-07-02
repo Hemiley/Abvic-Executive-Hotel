@@ -97,6 +97,13 @@ export type Staff = {
   createdAt: string;
 };
 
+export type HotelSettings = {
+  id: string;
+  hotelName: string;
+  logoUrl: string | null;
+  updatedAt: string;
+};
+
 export type DashboardSummary = {
   shiftActive: boolean;
   shift: Shift | null;
@@ -175,6 +182,10 @@ export const api = {
     id: string,
     data: Partial<{ fullName: string; email: string; role: string; avatarUrl: string; active: boolean; password: string }>
   ) => request<Staff>(`/api/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getSettings: () => request<HotelSettings>("/api/settings"),
+  updateSettings: (data: Partial<{ hotelName: string; logoUrl: string }>) =>
+    request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),
