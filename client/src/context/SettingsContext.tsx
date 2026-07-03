@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { api, type HotelSettings } from "../lib/api";
 
 type SettingsContextValue = {
@@ -8,6 +8,18 @@ type SettingsContextValue = {
 };
 
 const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
+
+function applyFontColor(fontColor: string | null | undefined) {
+  const root = document.documentElement;
+  const isLight = root.getAttribute("data-theme") === "light";
+  if (isLight) {
+    root.style.setProperty("--ui-font-color", "#111111");
+  } else if (fontColor) {
+    root.style.setProperty("--ui-font-color", fontColor);
+  } else {
+    root.style.removeProperty("--ui-font-color");
+  }
+}
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<HotelSettings | null>(null);
@@ -27,7 +39,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Apply background + visual settings as CSS custom properties
   useEffect(() => {
     const root = document.documentElement;
-    // Remove the old direct body.style.background so ::before takes over
     document.body.style.background = "";
 
     if (settings?.backgroundStyle) {
@@ -40,11 +51,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     root.style.setProperty("--bg-opacity", String(opacity));
     root.style.setProperty("--bg-blur", `${settings?.bgBlur ?? 0}px`);
 
-    if (settings?.fontColor) {
-      root.style.setProperty("--ui-font-color", settings.fontColor);
-    } else {
-      root.style.removeProperty("--ui-font-color");
-    }
+    applyFontColor(settings?.fontColor);
 
     if (settings?.fontSize) {
       root.style.setProperty("--ui-font-size", `${settings.fontSize}px`);
@@ -52,6 +59,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       root.style.removeProperty("--ui-font-size");
     }
   }, [settings?.backgroundStyle, settings?.bgOpacity, settings?.bgBlur, settings?.fontColor, settings?.fontSize]);
+
+  // Re-apply font colour whenever the theme attribute is toggled
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      applyFontColor(settings?.fontColor);
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [settings?.fontColor]);
 
   useEffect(() => {
     refresh();
