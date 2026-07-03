@@ -135,6 +135,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
     credentials: "include",
   });
+
+  // Session expired or was invalidated — redirect to login immediately
+  if (res.status === 401 && url !== "/api/auth/login" && url !== "/api/auth/me") {
+    window.location.href = "/login";
+    throw new Error("Session expired. Please log in again.");
+  }
+
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
