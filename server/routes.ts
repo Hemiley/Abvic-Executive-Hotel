@@ -489,28 +489,36 @@ export function registerRoutes(app: Express) {
       storage.getActiveShiftForReceptionist(req.session.receptionistId!),
     ]);
 
-    // Scope transactional stats to the current shift start, or midnight if no shift is active
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const windowStart: Date = shift ? new Date(shift.loginTime) : today;
-    const isInWindow = (d: Date | string) => new Date(d) >= windowStart;
+    // Transactional stats are scoped strictly to the active shift window.
+    // When no shift is active every counter shows 0 — they only accumulate
+    // once a shift is started, and reset to 0 when a new shift begins.
+    const shiftStart: Date | null = shift ? new Date(shift.loginTime) : null;
+    const isInShift = (d: Date | string) => shiftStart !== null && new Date(d) >= shiftStart;
 
-    const windowReservations = reservationsList.filter((r) => isInWindow(r.createdAt));
-    const windowPayments = paymentsList.filter((p) => isInWindow(p.createdAt) && p.type === "payment");
+    const shiftReservations = shiftStart
+      ? reservationsList.filter((r) => isInShift(r.createdAt))
+      : [];
+    const shiftPayments = shiftStart
+      ? paymentsList.filter((p) => isInShift(p.createdAt) && p.type === "payment")
+      : [];
 
     res.json({
       shiftActive: !!shift,
       shift,
-      todaysCheckIns: reservationsList.filter((r) => r.status === "checked_in" && isInWindow(r.updatedAt)).length,
-      todaysCheckOuts: reservationsList.filter((r) => r.status === "checked_out" && isInWindow(r.updatedAt)).length,
-      walkInGuests: windowReservations.filter((r) => r.source === "walk_in" && r.stayType !== "short_rest").length,
-      shortRestGuests: windowReservations.filter((r) => r.stayType === "short_rest").length,
+      todaysCheckIns: shiftStart
+        ? reservationsList.filter((r) => r.status === "checked_in" && isInShift(r.updatedAt)).length
+        : 0,
+      todaysCheckOuts: shiftStart
+        ? reservationsList.filter((r) => r.status === "checked_out" && isInShift(r.updatedAt)).length
+        : 0,
+      walkInGuests: shiftReservations.filter((r) => r.source === "walk_in" && r.stayType !== "short_rest").length,
+      shortRestGuests: shiftReservations.filter((r) => r.stayType === "short_rest").length,
       pendingReservations: reservationsList.filter((r) => r.status === "pending").length,
       occupiedRooms: roomsStatus.occupied || 0,
       availableRooms: roomsStatus.available || 0,
       reservedRooms: roomsStatus.reserved || 0,
-      totalSalesToday: windowPayments.reduce((sum, p) => sum + Number(p.amount), 0),
-      paymentsReceived: windowPayments.length,
+      totalSalesToday: shiftPayments.reduce((sum, p) => sum + Number(p.amount), 0),
+      paymentsReceived: shiftPayments.length,
       outstandingPayments: reservationsList.filter((r) => ["pending", "confirmed"].includes(r.status)).length,
     });
   });
