@@ -137,7 +137,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   // Session expired or was invalidated — redirect to login immediately
-  if (res.status === 401 && url !== "/api/auth/login" && url !== "/api/auth/me") {
+  // Skip if already on /login or if this is the auth-check/login request itself
+  if (
+    res.status === 401 &&
+    url !== "/api/auth/login" &&
+    url !== "/api/auth/me" &&
+    window.location.pathname !== "/login"
+  ) {
     window.location.href = "/login";
     throw new Error("Session expired. Please log in again.");
   }
