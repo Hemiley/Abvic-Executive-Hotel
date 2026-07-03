@@ -75,7 +75,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       <div className="main-col">
         <header className="topbar glass">
-          <div className="topbar-title">Receptionist Console</div>
+          <div className="topbar-title">{user?.role === "admin" ? "Super Admin Console" : "Receptionist Console"}</div>
           <div className="topbar-actions">
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "☀️" : "🌙"}
