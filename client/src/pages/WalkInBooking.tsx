@@ -12,11 +12,20 @@ const AMENITY_ICONS: Record<string, string> = {
   "Butler Service": "🤵",
 };
 
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash", icon: "💵" },
+  { value: "pos", label: "POS / Card", icon: "💳" },
+  { value: "bank_transfer", label: "Bank Transfer", icon: "🏦" },
+];
+
 export default function WalkInBooking() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [amountTendered, setAmountTendered] = useState("");
   const navigate = useNavigate();
   const { settings } = useSettings();
   const hourlyRate = settings?.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000;
@@ -59,17 +68,41 @@ export default function WalkInBooking() {
   );
   const lodgeTotal = selectedRoom ? Number(selectedRoom.pricePerNight) * lodgeNights : 0;
   const shortRestTotal = form.durationHours * hourlyRate;
+  const totalDue = form.stayType === "lodge" ? lodgeTotal : shortRestTotal;
 
-  async function handleBook(e: React.FormEvent) {
+  const tenderedNum = parseFloat(amountTendered);
+  const change =
+    paymentMethod === "cash" && amountTendered !== "" && !isNaN(tenderedNum)
+      ? tenderedNum - totalDue
+      : null;
+  // cash is only payable when a valid tendered amount ≥ total is entered
+  const cashInvalid = paymentMethod === "cash" && (amountTendered === "" || isNaN(tenderedNum) || tenderedNum < totalDue);
+
+  // Step 1: validate form and open payment modal
+  function handleBookClick(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedRoom) {
       setError("Please select a room before booking.");
       return;
     }
+    if (!form.fullName.trim() || !form.phone.trim()) {
+      setError("Full name and phone number are required.");
+      return;
+    }
     setError("");
+    setAmountTendered(String(totalDue));
+    setShowPaymentModal(true);
+  }
+
+  // Step 2: confirm payment → create booking + payment
+  // If payment recording fails we cancel the booking so no orphan is left.
+  async function handleConfirmPayment() {
+    if (!selectedRoom) return;
     setSubmitting(true);
+    setError("");
+    let reservationId: string | null = null;
     try {
-      await api.createBooking({
+      const booking = await api.createBooking({
         guest: {
           fullName: form.fullName,
           phone: form.phone,
@@ -89,9 +122,26 @@ export default function WalkInBooking() {
         stayType: form.stayType,
         durationHours: form.stayType === "short_rest" ? form.durationHours : undefined,
       });
+
+      reservationId = booking.reservation.id;
+
+      // Record payment — must succeed before we navigate away
+      await api.createPayment({
+        reservationId,
+        amount: totalDue,
+        method: paymentMethod,
+        type: "payment",
+      });
+
       navigate("/reservations");
     } catch (err: any) {
-      setError(err.message || "Failed to create booking");
+      // Roll back the booking if it was created but payment failed
+      if (reservationId) {
+        try {
+          await api.updateReservation(reservationId, { status: "cancelled" });
+        } catch {}
+      }
+      setError(err.message || "Failed to complete booking — please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -108,7 +158,7 @@ export default function WalkInBooking() {
         </div>
       </div>
 
-      <form onSubmit={handleBook}>
+      <form onSubmit={handleBookClick}>
         <div className="grid-2">
           <div className="card glass">
             <h2>Guest Information</h2>
@@ -239,9 +289,9 @@ export default function WalkInBooking() {
             {error && <p className="error-text">{error}</p>}
             <button className="btn full" type="submit" disabled={submitting}>
               {submitting
-                ? "Booking..."
+                ? "Processing…"
                 : selectedRoom
-                ? `Confirm ${form.stayType === "short_rest" ? "Short Rest" : "Booking"} — Room ${selectedRoom.roomNumber}`
+                ? `Proceed to Payment — Room ${selectedRoom.roomNumber}`
                 : "Select a room to continue"}
             </button>
           </div>
@@ -291,6 +341,115 @@ export default function WalkInBooking() {
           </div>
         </div>
       </form>
+
+      {/* ── Payment Confirmation Modal ── */}
+      {showPaymentModal && selectedRoom && (
+        <div className="modal-overlay" onClick={() => !submitting && setShowPaymentModal(false)}>
+          <div className="modal payment-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="payment-modal-header">
+              <span className="payment-modal-icon">💳</span>
+              <h2>Confirm Payment</h2>
+              <p className="page-sub">Collect payment before completing the booking</p>
+            </div>
+
+            {/* Booking summary */}
+            <div className="payment-booking-summary">
+              <div className="pbs-row">
+                <span>Guest</span>
+                <strong>{form.fullName}</strong>
+              </div>
+              <div className="pbs-row">
+                <span>Room</span>
+                <strong>Room {selectedRoom.roomNumber} — {selectedRoom.roomType}</strong>
+              </div>
+              <div className="pbs-row">
+                <span>Stay Type</span>
+                <strong>{form.stayType === "lodge" ? "🛏️ Lodge" : "⏱️ Short Rest"}</strong>
+              </div>
+              {form.stayType === "lodge" ? (
+                <div className="pbs-row">
+                  <span>Duration</span>
+                  <strong>{lodgeNights} night{lodgeNights !== 1 ? "s" : ""}</strong>
+                </div>
+              ) : (
+                <div className="pbs-row">
+                  <span>Duration</span>
+                  <strong>{form.durationHours} hour{form.durationHours !== 1 ? "s" : ""}</strong>
+                </div>
+              )}
+              <div className="pbs-divider" />
+              <div className="pbs-row pbs-total">
+                <span>Total Due</span>
+                <strong className="pbs-amount">₦{totalDue.toLocaleString()}</strong>
+              </div>
+            </div>
+
+            {/* Payment method */}
+            <div className="field" style={{ marginTop: 20 }}>
+              <label>Payment Method</label>
+              <div className="payment-method-grid">
+                {PAYMENT_METHODS.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    className={`payment-method-btn ${paymentMethod === m.value ? "active" : ""}`}
+                    onClick={() => setPaymentMethod(m.value)}
+                  >
+                    <span className="pm-icon">{m.icon}</span>
+                    <span className="pm-label">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cash change calculator */}
+            {paymentMethod === "cash" && (
+              <div className="cash-change-section">
+                <div className="field">
+                  <label>Amount Tendered (₦)</label>
+                  <input
+                    type="number"
+                    min={totalDue}
+                    step="50"
+                    value={amountTendered}
+                    onChange={(e) => setAmountTendered(e.target.value)}
+                  />
+                </div>
+                {change !== null && (
+                  <div className={`change-display ${change < 0 ? "insufficient" : ""}`}>
+                    {change < 0 ? (
+                      <>⚠️ Insufficient — short by ₦{Math.abs(change).toLocaleString()}</>
+                    ) : (
+                      <>💰 Change to return: <strong>₦{change.toLocaleString()}</strong></>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {error && <p className="error-text" style={{ marginTop: 12 }}>{error}</p>}
+
+            <div className="modal-actions" style={{ marginTop: 24 }}>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setShowPaymentModal(false)}
+                disabled={submitting}
+              >
+                ← Back
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleConfirmPayment}
+                disabled={submitting || cashInvalid}
+              >
+                {submitting ? "Processing…" : "✓ Confirm Payment & Check In"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
