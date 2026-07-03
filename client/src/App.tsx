@@ -18,7 +18,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/abvichoteldashboard" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -26,9 +26,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/abvichoteldashboard" replace />} />
       <Route
-        path="/dashboard"
+        path="/abvichoteldashboard"
         element={
           <ProtectedRoute>
             <Dashboard />
@@ -99,7 +99,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/abvichoteldashboard" replace />} />
     </Routes>
   );
 }

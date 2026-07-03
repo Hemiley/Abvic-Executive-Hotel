@@ -18,7 +18,7 @@ export default function Login() {
     setSubmitting(true);
     try {
       await login(username, password);
-      navigate("/dashboard");
+      navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {

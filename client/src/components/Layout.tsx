@@ -5,7 +5,7 @@ import { useSettings } from "../context/SettingsContext";
 import { useNotifications } from "../context/NotificationsContext";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Dashboard", icon: "🏨" },
+  { to: "/abvichoteldashboard", label: "Dashboard", icon: "🏨" },
   { to: "/walk-in", label: "Walk-in Booking", icon: "🛎️" },
   { to: "/reservations", label: "Reservations", icon: "📋" },
   { to: "/rooms", label: "Rooms", icon: "🚪" },
