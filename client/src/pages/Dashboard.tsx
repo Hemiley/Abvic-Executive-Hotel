@@ -55,16 +55,16 @@ export default function Dashboard() {
 
   const cards = summary
     ? [
-        { label: "Today's Check-ins", value: summary.todaysCheckIns, icon: "🛎️" },
-        { label: "Today's Check-outs", value: summary.todaysCheckOuts, icon: "🚪" },
-        { label: "Walk-in Guests", value: summary.walkInGuests, icon: "🚶" },
-        { label: "Short Rest Guests", value: summary.shortRestGuests, icon: "⏱️" },
+        { label: summary.shiftActive ? "Check-ins This Shift" : "Today's Check-ins", value: summary.todaysCheckIns, icon: "🛎️" },
+        { label: summary.shiftActive ? "Check-outs This Shift" : "Today's Check-outs", value: summary.todaysCheckOuts, icon: "🚪" },
+        { label: summary.shiftActive ? "Walk-in Guests This Shift" : "Walk-in Guests Today", value: summary.walkInGuests, icon: "🚶" },
+        { label: summary.shiftActive ? "Short Rest This Shift" : "Short Rest Today", value: summary.shortRestGuests, icon: "⏱️" },
         { label: "Pending Reservations", value: summary.pendingReservations, icon: "⏳" },
         { label: "Occupied Rooms", value: summary.occupiedRooms, icon: "🛏️" },
         { label: "Available Rooms", value: summary.availableRooms, icon: "✅" },
         { label: "Reserved Rooms", value: summary.reservedRooms, icon: "📌" },
-        { label: "Total Sales Today", value: `₦${summary.totalSalesToday.toFixed(2)}`, icon: "💰" },
-        { label: "Payments Received", value: summary.paymentsReceived, icon: "💳" },
+        { label: summary.shiftActive ? "Sales This Shift" : "Total Sales Today", value: `₦${summary.totalSalesToday.toFixed(2)}`, icon: "💰" },
+        { label: summary.shiftActive ? "Payments This Shift" : "Payments Received", value: summary.paymentsReceived, icon: "💳" },
         { label: "Outstanding Payments", value: summary.outstandingPayments, icon: "⚠️" },
       ]
     : [];

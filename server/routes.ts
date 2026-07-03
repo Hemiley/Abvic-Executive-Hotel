@@ -489,29 +489,28 @@ export function registerRoutes(app: Express) {
       storage.getActiveShiftForReceptionist(req.session.receptionistId!),
     ]);
 
+    // Scope transactional stats to the current shift start, or midnight if no shift is active
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const isToday = (d: Date | string) => {
-      const date = new Date(d);
-      return date >= today;
-    };
+    const windowStart: Date = shift ? new Date(shift.loginTime) : today;
+    const isInWindow = (d: Date | string) => new Date(d) >= windowStart;
 
-    const todaysReservations = reservationsList.filter((r) => isToday(r.createdAt));
-    const todaysPayments = paymentsList.filter((p) => isToday(p.createdAt) && p.type === "payment");
+    const windowReservations = reservationsList.filter((r) => isInWindow(r.createdAt));
+    const windowPayments = paymentsList.filter((p) => isInWindow(p.createdAt) && p.type === "payment");
 
     res.json({
       shiftActive: !!shift,
       shift,
-      todaysCheckIns: reservationsList.filter((r) => r.status === "checked_in" && isToday(r.updatedAt)).length,
-      todaysCheckOuts: reservationsList.filter((r) => r.status === "checked_out" && isToday(r.updatedAt)).length,
-      walkInGuests: todaysReservations.filter((r) => r.source === "walk_in" && r.stayType !== "short_rest").length,
-      shortRestGuests: todaysReservations.filter((r) => r.stayType === "short_rest").length,
+      todaysCheckIns: reservationsList.filter((r) => r.status === "checked_in" && isInWindow(r.updatedAt)).length,
+      todaysCheckOuts: reservationsList.filter((r) => r.status === "checked_out" && isInWindow(r.updatedAt)).length,
+      walkInGuests: windowReservations.filter((r) => r.source === "walk_in" && r.stayType !== "short_rest").length,
+      shortRestGuests: windowReservations.filter((r) => r.stayType === "short_rest").length,
       pendingReservations: reservationsList.filter((r) => r.status === "pending").length,
       occupiedRooms: roomsStatus.occupied || 0,
       availableRooms: roomsStatus.available || 0,
       reservedRooms: roomsStatus.reserved || 0,
-      totalSalesToday: todaysPayments.reduce((sum, p) => sum + Number(p.amount), 0),
-      paymentsReceived: todaysPayments.length,
+      totalSalesToday: windowPayments.reduce((sum, p) => sum + Number(p.amount), 0),
+      paymentsReceived: windowPayments.length,
       outstandingPayments: reservationsList.filter((r) => ["pending", "confirmed"].includes(r.status)).length,
     });
   });
