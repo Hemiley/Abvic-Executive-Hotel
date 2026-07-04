@@ -29,9 +29,12 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-if (isProd) {
-  app.set("trust proxy", 1);
-}
+// Always trust the Replit proxy (it terminates TLS for all environments)
+app.set("trust proxy", 1);
+
+// Detect whether we are running inside the Replit hosted environment
+// (both dev preview and deployed production run behind Replit's HTTPS proxy)
+const behindReplitProxy = !!process.env.REPLIT_DEV_DOMAIN || !!process.env.REPLIT_DEPLOYMENT_ID;
 
 app.use(
   session({
@@ -45,8 +48,11 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
+      // Mark secure whenever we're behind the Replit HTTPS proxy or in production
+      secure: isProd || behindReplitProxy,
+      // SameSite=none is required for cookies to be sent in the Replit proxied
+      // iframe preview; fall back to lax for plain localhost development
+      sameSite: behindReplitProxy ? "none" : "lax",
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   })
