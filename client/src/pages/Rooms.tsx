@@ -103,6 +103,7 @@ export default function Rooms() {
   const [viewing, setViewing] = useState<Room | null>(null);
   const [editing, setEditing] = useState<Room | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
   const [form, setForm] = useState({
     roomNumber: "",
     roomType: "Standard Room",
@@ -158,6 +159,7 @@ export default function Rooms() {
   }
 
   function openEdit(room: Room) {
+    setEditError("");
     setEditing(room);
     // Merge imageUrls array with legacy imageUrl for backward compat
     const urls = room.imageUrls && room.imageUrls.length > 0
@@ -218,7 +220,7 @@ export default function Rooms() {
       setEditing(null);
       load();
     } catch (e: any) {
-      setError(e.message);
+      setEditError(e.message);
     } finally {
       setSaving(false);
     }
@@ -443,6 +445,7 @@ export default function Rooms() {
               <label>Amenities (comma separated)</label>
               <input value={editForm.amenities} onChange={(e) => setEditForm({ ...editForm, amenities: e.target.value })} />
             </div>
+            {editError && <p className="error-text">{editError}</p>}
             <div className="modal-actions">
               <button type="button" className="btn secondary" onClick={() => setEditing(null)}>
                 Cancel

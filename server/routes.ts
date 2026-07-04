@@ -330,7 +330,16 @@ export function registerRoutes(app: Express) {
       }
     }
 
-    const room = await storage.updateRoom(req.params.id, parsed.data);
+    let room: Awaited<ReturnType<typeof storage.updateRoom>>;
+    try {
+      room = await storage.updateRoom(req.params.id, parsed.data);
+    } catch (err: any) {
+      // Unique constraint on room_number
+      if (err?.code === "23505" && err?.constraint === "rooms_room_number_unique") {
+        return res.status(409).json({ message: `Room number "${parsed.data.roomNumber}" is already used by another room.` });
+      }
+      throw err;
+    }
     if (!room) return res.status(404).json({ message: "Room not found" });
     await storage.logAction({
       receptionistId: req.session.receptionistId,
