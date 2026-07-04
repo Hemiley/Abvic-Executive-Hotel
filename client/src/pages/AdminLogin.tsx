@@ -21,7 +21,7 @@ export default function AdminLogin() {
   const [resetError, setResetError] = useState("");
   const [resetSubmitting, setResetSubmitting] = useState(false);
 
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
 
@@ -30,13 +30,12 @@ export default function AdminLogin() {
     setError("");
     setSubmitting(true);
     try {
-      const result = await api.login(username, password);
+      const result = await login(username, password);
       if (result?.role !== "admin") {
-        await api.logout().catch(() => {});
+        await logout().catch(() => {});
         setError("Access denied. This portal is for administrators only.");
         return;
       }
-      await login(username, password);
       navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");

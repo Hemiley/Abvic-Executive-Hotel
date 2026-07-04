@@ -10,7 +10,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [adminRedirect, setAdminRedirect] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const { settings } = useSettings();
   const navigate = useNavigate();
 
@@ -20,13 +20,12 @@ export default function Login() {
     setAdminRedirect(false);
     setSubmitting(true);
     try {
-      const result = await api.login(username, password);
+      const result = await login(username, password);
       if (result?.role === "admin") {
-        await api.logout().catch(() => {});
+        await logout().catch(() => {});
         setAdminRedirect(true);
         return;
       }
-      await login(username, password);
       navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");

@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await api.login(username, password);
     setUser(result);
     setShift(result.shift);
+    return result;
   }
 
   async function logout() {
