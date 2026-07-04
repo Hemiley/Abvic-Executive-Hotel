@@ -768,6 +768,55 @@ select option {
   font-size: 11px;
 }
 
+/* Clickable guest cell in Reservations table */
+.guest-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.guest-link-name {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.guest-link-btn:hover .guest-link-name {
+  opacity: 0.8;
+}
+
+/* Guest detail modal grid */
+.guest-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+}
+
+.guest-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 13px;
+  gap: 12px;
+}
+
+.guest-detail-row span {
+  color: var(--muted);
+  flex-shrink: 0;
+  min-width: 140px;
+}
+
+.guest-detail-row strong {
+  text-align: right;
+}
+
 .receipt-row {
   display: flex;
   justify-content: space-between;

@@ -97,6 +97,7 @@ export default function Reservations() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const [expiredAlert, setExpiredAlert] = useState<Reservation | null>(null);
   const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
+  const [guestDetail, setGuestDetail] = useState<Reservation | null>(null);
   const { settings } = useSettings();
   const { reload: reloadNotifs } = useNotifications();
   const hourlyRate = settings?.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000;
@@ -264,8 +265,14 @@ export default function Reservations() {
             {filtered.map((r) => (
               <tr key={r.id}>
                 <td>
-                  <div>{r.guest?.fullName}</div>
-                  <div className="muted">{r.guest?.phone}</div>
+                  <button
+                    className="guest-link-btn"
+                    onClick={() => setGuestDetail(r)}
+                    title="View guest details"
+                  >
+                    <div className="guest-link-name">{r.guest?.fullName}</div>
+                    <div className="muted">{r.guest?.phone}</div>
+                  </button>
                 </td>
                 <td>
                   {r.room?.roomNumber} <span className="muted">({r.room?.roomType})</span>
@@ -386,6 +393,83 @@ export default function Reservations() {
             <div className="modal-actions">
               <button className="btn secondary" onClick={() => setPayTarget(null)}>Cancel</button>
               <button className="btn" onClick={submitPayment}>Confirm Payment</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {guestDetail && (
+        <div className="modal-overlay" onClick={() => setGuestDetail(null)}>
+          <div className="modal glass" onClick={(e) => e.stopPropagation()}>
+            <h2>Guest Details</h2>
+            <p className="page-sub">
+              Booking reference · Room {guestDetail.room?.roomNumber}{" "}
+              <span className="muted">({guestDetail.room?.roomType})</span>
+            </p>
+            <div className="guest-detail-grid">
+              <div className="guest-detail-row">
+                <span>Full Name</span>
+                <strong>{guestDetail.guest?.fullName || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Phone</span>
+                <strong>{guestDetail.guest?.phone || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Email</span>
+                <strong>{guestDetail.guest?.email || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Nationality</span>
+                <strong>{guestDetail.guest?.nationality || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>ID Type</span>
+                <strong>{guestDetail.guest?.idType || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>ID Number</span>
+                <strong>{guestDetail.guest?.idNumber || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Address</span>
+                <strong>{guestDetail.guest?.address || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Emergency Contact</span>
+                <strong>{guestDetail.guest?.emergencyContact || "—"}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Stay Type</span>
+                <strong>
+                  {guestDetail.stayType === "short_rest"
+                    ? `Short Rest (${guestDetail.durationHours ?? 1}h)`
+                    : "Lodge"}
+                </strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Check-in</span>
+                <strong>{guestDetail.checkInDate}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Check-out</span>
+                <strong>{guestDetail.stayType === "short_rest" ? "Same day" : guestDetail.checkOutDate}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Source</span>
+                <strong>{guestDetail.source.replace("_", " ")}</strong>
+              </div>
+              <div className="guest-detail-row">
+                <span>Status</span>
+                <strong>
+                  <span className={`badge status-${guestDetail.status}`}>
+                    {guestDetail.status.replace("_", " ")}
+                  </span>
+                </strong>
+              </div>
+            </div>
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button className="btn full" onClick={() => setGuestDetail(null)}>Close</button>
             </div>
           </div>
         </div>
