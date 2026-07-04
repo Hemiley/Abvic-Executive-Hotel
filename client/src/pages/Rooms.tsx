@@ -112,6 +112,7 @@ export default function Rooms() {
     imageUrls: [] as string[],
   });
   const [editForm, setEditForm] = useState({
+    roomNumber: "",
     roomType: "",
     pricePerNight: "",
     capacity: "",
@@ -163,6 +164,7 @@ export default function Rooms() {
       ? room.imageUrls
       : room.imageUrl ? [room.imageUrl] : [];
     setEditForm({
+      roomNumber: room.roomNumber,
       roomType: room.roomType,
       pricePerNight: room.pricePerNight,
       capacity: String(room.capacity),
@@ -205,6 +207,7 @@ export default function Rooms() {
     setSaving(true);
     try {
       await api.updateRoom(editing.id, {
+        roomNumber: editForm.roomNumber,
         roomType: editForm.roomType,
         pricePerNight: Number(editForm.pricePerNight) as any,
         capacity: Number(editForm.capacity) as any,
@@ -409,9 +412,20 @@ export default function Rooms() {
 
             <div className="field-row">
               <div className="field">
+                <label>Room Number</label>
+                <input
+                  value={editForm.roomNumber}
+                  onChange={(e) => setEditForm({ ...editForm, roomNumber: e.target.value })}
+                  required
+                  placeholder="e.g. 101"
+                />
+              </div>
+              <div className="field">
                 <label>Room Name / Type</label>
                 <input value={editForm.roomType} onChange={(e) => setEditForm({ ...editForm, roomType: e.target.value })} required />
               </div>
+            </div>
+            <div className="field-row">
               <div className="field">
                 <label>Price / Night (₦)</label>
                 <input
