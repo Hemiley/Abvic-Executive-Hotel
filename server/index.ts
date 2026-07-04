@@ -12,8 +12,21 @@ const PgSession = connectPgSimple(session);
 
 const isProd = process.env.NODE_ENV === "production";
 
-if (isProd && !process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET must be set in production");
+// ── Startup environment check ──────────────────────────────────────────────
+const missingVars: string[] = [];
+if (!process.env.DATABASE_URL) missingVars.push("DATABASE_URL");
+if (isProd && !process.env.SESSION_SECRET) missingVars.push("SESSION_SECRET");
+
+if (missingVars.length > 0) {
+  console.error("==========================================================");
+  console.error(" FATAL: Required environment variable(s) not set:");
+  missingVars.forEach((v) => console.error(`   • ${v}`));
+  console.error("");
+  console.error(" Add these in your hosting provider's Variables/Secrets tab.");
+  console.error(" SESSION_SECRET: any long random string (32+ chars).");
+  console.error(" DATABASE_URL:   PostgreSQL connection string.");
+  console.error("==========================================================");
+  process.exit(1);
 }
 
 if (isProd) {
@@ -51,7 +64,19 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 const port = Number(process.env.PORT) || 5000;
 
 async function main() {
-  await seedAdmin();
+  // Seed initial data — wrapped so a seed failure is logged but doesn't
+  // prevent the HTTP server from starting (avoids a crash loop).
+  try {
+    await seedAdmin();
+  } catch (err: any) {
+    if (err?.message?.includes("relation") || err?.code === "42P01") {
+      console.error(
+        "Database schema not found. Run `npm run db:push` against your production database, or ensure the build step ran `drizzle-kit push --force`."
+      );
+    } else {
+      console.error("Seed error (non-fatal):", err?.message ?? err);
+    }
+  }
 
   if (process.env.NODE_ENV === "development") {
     const http = await import("http");
@@ -87,4 +112,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error("Fatal startup error:", err);
+  process.exit(1);
+});
