@@ -493,6 +493,15 @@ select option {
   background: var(--danger);
 }
 
+.btn.success {
+  background: var(--success);
+  color: #fff;
+}
+
+.btn.success:hover {
+  opacity: 0.88;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 13px;

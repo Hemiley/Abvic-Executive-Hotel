@@ -96,6 +96,7 @@ export default function Reservations() {
   const [payTxn, setPayTxn] = useState("");
   const [receiptData, setReceiptData] = useState<any>(null);
   const [expiredAlert, setExpiredAlert] = useState<Reservation | null>(null);
+  const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
   const { settings } = useSettings();
   const { reload: reloadNotifs } = useNotifications();
   const hourlyRate = settings?.shortRestHourlyRate ? parseFloat(settings.shortRestHourlyRate) : 3000;
@@ -106,6 +107,12 @@ export default function Reservations() {
 
   function load() {
     api.getReservations().then(setReservations).catch((e) => setError(e.message));
+    api.getPayments().then((payments) => {
+      const paid = new Set(
+        payments.filter((p) => p.type === "payment").map((p) => p.reservationId)
+      );
+      setPaidIds(paid);
+    }).catch(() => {});
   }
 
   useEffect(() => { load(); }, []);
@@ -313,8 +320,11 @@ export default function Reservations() {
                         Cancel
                       </button>
                     )}
-                    <button className="btn" onClick={() => openPayment(r)}>
-                      Payment
+                    <button
+                      className={`btn${paidIds.has(r.id) ? " success" : ""}`}
+                      onClick={() => openPayment(r)}
+                    >
+                      {paidIds.has(r.id) ? "✓ Paid" : "Payment"}
                     </button>
                   </div>
                 </td>
