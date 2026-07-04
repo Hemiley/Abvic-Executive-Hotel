@@ -2,11 +2,13 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
+import { api } from "../lib/api";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [adminRedirect, setAdminRedirect] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const { settings } = useSettings();
@@ -15,8 +17,15 @@ export default function Login() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setAdminRedirect(false);
     setSubmitting(true);
     try {
+      const result = await api.login(username, password);
+      if (result?.role === "admin") {
+        await api.logout().catch(() => {});
+        setAdminRedirect(true);
+        return;
+      }
       await login(username, password);
       navigate("/abvichoteldashboard");
     } catch (err: any) {
@@ -54,6 +63,18 @@ export default function Login() {
           />
         </div>
         {error && <p className="error-text">{error}</p>}
+        {adminRedirect && (
+          <div className="admin-redirect-box">
+            <p>Administrator accounts must use the Admin Login portal.</p>
+            <button
+              type="button"
+              className="btn-admin-switch"
+              onClick={() => navigate("/admin-login")}
+            >
+              🔐 Go to Admin Login
+            </button>
+          </div>
+        )}
         <button className="btn full" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
