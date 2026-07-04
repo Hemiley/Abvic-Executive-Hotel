@@ -58,6 +58,36 @@ app.use(
   })
 );
 
+// ── Async error safety ────────────────────────────────────────────────────────
+// Express 4 does not auto-forward thrown errors from async route handlers.
+// In Node ≥ 15 an unhandled rejection crashes the process; in the Replit proxy
+// that manifests as "Application failed to respond".
+// Patch the router methods so every handler is wrapped with .catch(next).
+(["get", "post", "put", "patch", "delete"] as const).forEach((method) => {
+  const original = (app as any)[method].bind(app);
+  (app as any)[method] = (...args: any[]) => {
+    const patched = args.map((h) =>
+      typeof h === "function"
+        ? (req: any, res: any, next: any) => {
+            try {
+              const result = h(req, res, next);
+              if (result && typeof result.catch === "function") result.catch(next);
+            } catch (err) {
+              next(err);
+            }
+          }
+        : h
+    );
+    return original(...patched);
+  };
+});
+
+// Belt-and-suspenders: log any rejection that still slips through without
+// crashing the process (Node ≥ 15 turns these into fatal exits by default).
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (non-fatal):", reason);
+});
+
 registerRoutes(app);
 
 // Global error handler — catches unhandled async errors forwarded via next(err)
