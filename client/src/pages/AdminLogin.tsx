@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
+import { api } from "../lib/api";
 
 export default function AdminLogin() {
   const [username, setUsername] = useState("");
@@ -17,11 +18,14 @@ export default function AdminLogin() {
     setError("");
     setSubmitting(true);
     try {
-      const user = await login(username, password);
-      if (user?.role !== "admin") {
+      const result = await api.login(username, password);
+      if (result?.role !== "admin") {
+        // Not an admin — log out the session that was just created and show error
+        await api.logout().catch(() => {});
         setError("Access denied. This portal is for administrators only.");
         return;
       }
+      await login(username, password);
       navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");
