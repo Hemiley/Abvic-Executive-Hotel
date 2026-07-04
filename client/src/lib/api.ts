@@ -142,7 +142,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     res.status === 401 &&
     url !== "/api/auth/login" &&
     url !== "/api/auth/me" &&
-    window.location.pathname !== "/login"
+    window.location.pathname !== "/login" &&
+    window.location.pathname !== "/admin-login"
   ) {
     window.location.href = "/login";
     throw new Error("Session expired. Please log in again.");
