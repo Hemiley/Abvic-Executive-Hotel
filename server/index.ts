@@ -48,7 +48,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(status).json({ message: err.message ?? "Internal server error" });
 });
 
-const port = 5000;
+const port = Number(process.env.PORT) || 5000;
 
 async function main() {
   await seedAdmin();
