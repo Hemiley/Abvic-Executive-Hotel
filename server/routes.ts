@@ -92,6 +92,36 @@ export function registerRoutes(app: Express) {
     });
   });
 
+  // Password reset — admin only, verified by current password (no session required)
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const { username, currentPassword, newPassword } = req.body;
+    if (!username || !currentPassword || !newPassword)
+      return res.status(400).json({ message: "All fields are required." });
+    if (typeof newPassword !== "string" || newPassword.length < 8)
+      return res.status(400).json({ message: "New password must be at least 8 characters." });
+
+    const user = await storage.getReceptionistByUsername(username);
+    if (!user || !user.active)
+      return res.status(401).json({ message: "Invalid credentials." });
+    if (user.role !== "admin")
+      return res.status(403).json({ message: "Password reset is only available for administrator accounts." });
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid)
+      return res.status(401).json({ message: "Current password is incorrect." });
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await storage.updateReceptionist(user.id, { passwordHash });
+    await storage.logAction({
+      receptionistId: user.id,
+      receptionistName: user.fullName,
+      action: "password_reset",
+      details: `${user.fullName} reset their password`,
+    });
+
+    res.json({ ok: true });
+  });
+
   app.post("/api/auth/logout", async (req, res) => {
     const name = req.session.receptionistName;
     const id = req.session.receptionistId;

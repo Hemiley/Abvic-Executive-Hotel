@@ -78,11 +78,6 @@ export default function Login() {
         <button className="btn full" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
-        <div className="login-footer">
-          <a href="#" onClick={(e) => e.preventDefault()}>
-            Forgot password?
-          </a>
-        </div>
         <div className="login-admin-switch">
           <button
             type="button"
