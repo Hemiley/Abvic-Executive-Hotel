@@ -3,11 +3,13 @@ import { api, type Shift } from "../lib/api";
 
 type AuthUser = { id: string; username: string; fullName: string; role: string; avatarUrl?: string | null } | null;
 
+type LoginResult = { id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null };
+
 type AuthContextValue = {
   user: AuthUser;
   shift: Shift | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refreshShift: () => Promise<void>;
   refreshUser: () => Promise<void>;
