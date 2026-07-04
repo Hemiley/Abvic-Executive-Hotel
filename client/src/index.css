@@ -768,6 +768,80 @@ select option {
   font-size: 11px;
 }
 
+/* Admin login switch button on Receptionist Login page */
+.login-admin-switch {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.btn-admin-switch {
+  background: none;
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.02em;
+}
+
+.btn-admin-switch:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Admin badge on admin login page */
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-badge-icon {
+  font-size: 13px;
+}
+
+/* Admin sign-in button (red tint) */
+.btn.btn-admin,
+.btn-admin {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border-color: #dc2626;
+}
+
+.btn.btn-admin:hover,
+.btn-admin:hover {
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+}
+
+/* Back link on admin login page */
+.login-switch-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.login-switch-link:hover {
+  opacity: 0.75;
+}
+
 /* Clickable guest cell in Reservations table */
 .guest-link-btn {
   background: none;

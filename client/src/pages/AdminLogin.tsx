@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
 
-export default function Login() {
+export default function AdminLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,7 +17,11 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      await login(username, password);
+      const user = await login(username, password);
+      if (user?.role !== "admin") {
+        setError("Access denied. This portal is for administrators only.");
+        return;
+      }
       navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");
@@ -38,11 +42,23 @@ export default function Login() {
           )}{" "}
           {settings?.hotelName || "Grand Hotel"}
         </div>
-        <h1>Receptionist Login</h1>
-        <p className="login-sub">Sign in to access the front desk console</p>
+
+        <div className="admin-badge">
+          <span className="admin-badge-icon">🔐</span>
+          Admin Portal
+        </div>
+
+        <h1>Administrator Login</h1>
+        <p className="login-sub">Restricted access · Authorised personnel only</p>
+
         <div className="field">
           <label>Username</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoFocus
+            autoComplete="username"
+          />
         </div>
         <div className="field">
           <label>Password</label>
@@ -53,22 +69,20 @@ export default function Login() {
             autoComplete="current-password"
           />
         </div>
+
         {error && <p className="error-text">{error}</p>}
-        <button className="btn full" type="submit" disabled={submitting}>
-          {submitting ? "Signing in..." : "Sign in"}
+
+        <button className="btn full btn-admin" type="submit" disabled={submitting}>
+          {submitting ? "Signing in..." : "Sign in as Admin"}
         </button>
+
         <div className="login-footer">
-          <a href="#" onClick={(e) => e.preventDefault()}>
-            Forgot password?
-          </a>
-        </div>
-        <div className="login-admin-switch">
           <button
             type="button"
-            className="btn-admin-switch"
-            onClick={() => navigate("/admin-login")}
+            className="login-switch-link"
+            onClick={() => navigate("/login")}
           >
-            🔐 Admin Login
+            ← Back to Receptionist Login
           </button>
         </div>
       </form>

@@ -4,6 +4,7 @@ import { SettingsProvider } from "./context/SettingsContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
+import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
 import WalkInBooking from "./pages/WalkInBooking";
 import Reservations from "./pages/Reservations";
@@ -26,6 +27,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/admin-login" element={<AdminLogin />} />
       <Route path="/" element={<Navigate to="/abvichoteldashboard" replace />} />
       <Route
         path="/abvichoteldashboard"
