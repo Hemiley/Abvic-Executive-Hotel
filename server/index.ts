@@ -3,6 +3,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { pool } from "./db";
+import { ensureSchema } from "./ensure-schema";
 import { seedAdmin } from "./seed";
 
 const app = express();
@@ -100,18 +101,21 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 const port = Number(process.env.PORT) || 5000;
 
 async function main() {
+  // Ensure all tables exist before anything else runs.
+  // This is idempotent — safe to run on every boot, no drizzle-kit needed.
+  try {
+    await ensureSchema();
+  } catch (err: any) {
+    console.error("Schema setup failed:", err?.message ?? err);
+    process.exit(1);
+  }
+
   // Seed initial data — wrapped so a seed failure is logged but doesn't
   // prevent the HTTP server from starting (avoids a crash loop).
   try {
     await seedAdmin();
   } catch (err: any) {
-    if (err?.message?.includes("relation") || err?.code === "42P01") {
-      console.error(
-        "Database schema not found. Run `npm run db:push` against your production database, or ensure the build step ran `drizzle-kit push --force`."
-      );
-    } else {
-      console.error("Seed error (non-fatal):", err?.message ?? err);
-    }
+    console.error("Seed error (non-fatal):", err?.message ?? err);
   }
 
   if (process.env.NODE_ENV === "development") {
