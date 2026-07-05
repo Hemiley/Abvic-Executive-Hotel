@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings } from "../lib/api";
 
@@ -272,137 +273,111 @@ export default function Dashboard() {
     }, 400);
   }
 
-  // Pure SpreadsheetML Excel export — no npm dependency needed
+  // Excel export using SheetJS — generates a valid .xlsx file
   function handleDownloadExcel() {
     if (!reportData) return;
     const { shift, payments, reservations, settings } = reportData;
     const date = new Date(shift.loginTime).toISOString().slice(0, 10);
-    const fmtNum = (n: string | number | null | undefined) => Number(n ?? 0);
-    const fmtDate = (d: string | null | undefined) =>
-      d ? new Date(d).toLocaleString("en-NG") : "";
 
-    // SpreadsheetML cell helpers
-    const xmlEsc = (v: string | number | null | undefined) =>
-      String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    const str = (v: string | number | null | undefined) =>
-      `<Cell><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`;
-    const num = (v: string | number | null | undefined) =>
-      `<Cell><Data ss:Type="Number">${fmtNum(v)}</Data></Cell>`;
-    const header = (v: string) =>
-      `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`;
-    const row = (...cells: string[]) => `<Row>${cells.join("")}</Row>`;
-    const emptyRow = () => `<Row/>`;
+    // Helpers
+    const fmtNum = (n: string | number | null | undefined): number => Number(n ?? 0);
+    // Return a JS Date so SheetJS stores it as a real Excel date serial
+    const toDate = (d: string | null | undefined): Date | string =>
+      d ? new Date(d) : "";
+    // Strip characters not allowed in filenames on any OS
+    const safeName = (s: string) => s.replace(/[/\\:*?"<>|]/g, "-").replace(/\s+/g, "-");
 
     const netRevenue =
       payments.filter(p => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0) -
       payments.filter(p => p.type === "refund").reduce((s, p) => s + Number(p.amount), 0);
 
+    const wb = XLSX.utils.book_new();
+
+    // Date cell format string applied via sheet cell objects below
+    const DATE_FMT = "yyyy-mm-dd hh:mm";
+
+    // Helper: wrap a Date value in a SheetJS cell object with date formatting
+    const dateCellVal = (d: string | null | undefined) => {
+      const v = toDate(d);
+      return v instanceof Date ? { t: "d", v, z: DATE_FMT } : "";
+    };
+
     // ── Sheet 1: Summary ──────────────────────────────────────────────────────
-    const summarySheet = `
-    <Worksheet ss:Name="Summary">
-      <Table ss:DefaultColumnWidth="160">
-        ${row(str(settings.hotelName))}
-        ${row(str("End-of-Shift Report"))}
-        ${emptyRow()}
-        ${row(str("Receptionist"), str(shift.receptionistName))}
-        ${row(str("Shift Start"), str(fmtDate(shift.loginTime)))}
-        ${row(str("Shift End"), str(fmtDate(shift.logoutTime)))}
-        ${row(str("Report Date"), str(fmtDate(new Date().toISOString())))}
-        ${emptyRow()}
-        ${row(str("SHIFT SUMMARY"))}
-        ${row(str("Guests Served"), num(shift.guestsServed))}
-        ${row(str("Rooms Booked"), num(shift.roomsBooked))}
-        ${row(str("Reservations Processed"), num(shift.reservationsProcessed))}
-        ${emptyRow()}
-        ${row(str("CASH RECONCILIATION"))}
-        ${row(str("Opening Balance (N)"), num(shift.openingBalance))}
-        ${row(str("Closing Balance (N)"), num(shift.closingBalance))}
-        ${row(str("Cash Variance (N)"), num(shift.cashVariance))}
-        ${emptyRow()}
-        ${row(str("SALES BREAKDOWN"))}
-        ${row(str("Total Sales (N)"), num(shift.totalSales))}
-        ${row(str("Cash Sales (N)"), num(shift.cashSales))}
-        ${row(str("Card / POS Sales (N)"), num(shift.cardSales))}
-        ${row(str("Bank Transfer Sales (N)"), num(shift.transferSales))}
-        ${row(str("Discounts Given (N)"), num(shift.discountsGiven))}
-        ${row(str("Refunds Issued (N)"), num(shift.refundsIssued))}
-        ${row(str("Net Revenue (N)"), num(netRevenue))}
-      </Table>
-    </Worksheet>`;
+    const summaryData: (string | number | { t: string; v: Date; z: string } | undefined | null)[][] = [
+      [settings.hotelName],
+      ["End-of-Shift Report"],
+      [],
+      ["Receptionist", shift.receptionistName],
+      ["Shift Start", dateCellVal(shift.loginTime) as any],
+      ["Shift End", dateCellVal(shift.logoutTime) as any],
+      ["Report Date", dateCellVal(new Date().toISOString()) as any],
+      [],
+      ["SHIFT SUMMARY"],
+      ["Guests Served", fmtNum(shift.guestsServed)],
+      ["Rooms Booked", fmtNum(shift.roomsBooked)],
+      ["Reservations Processed", fmtNum(shift.reservationsProcessed)],
+      [],
+      ["CASH RECONCILIATION"],
+      ["Opening Balance (\u20a6)", fmtNum(shift.openingBalance)],
+      ["Closing Balance (\u20a6)", fmtNum(shift.closingBalance)],
+      ["Cash Variance (\u20a6)", fmtNum(shift.cashVariance)],
+      [],
+      ["SALES BREAKDOWN"],
+      ["Total Sales (\u20a6)", fmtNum(shift.totalSales)],
+      ["Cash Sales (\u20a6)", fmtNum(shift.cashSales)],
+      ["Card / POS Sales (\u20a6)", fmtNum(shift.cardSales)],
+      ["Bank Transfer Sales (\u20a6)", fmtNum(shift.transferSales)],
+      ["Discounts Given (\u20a6)", fmtNum(shift.discountsGiven)],
+      ["Refunds Issued (\u20a6)", fmtNum(shift.refundsIssued)],
+      ["Net Revenue (\u20a6)", fmtNum(netRevenue)],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary["!cols"] = [{ wch: 32 }, { wch: 24 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
 
     // ── Sheet 2: Bookings ─────────────────────────────────────────────────────
+    const bookingHeaders = [
+      "Room No.", "Room Type", "Guest Name", "Phone", "Stay Type",
+      "Check-in", "Check-out", "Duration (hrs)", "Amount Paid (\u20a6)",
+    ];
     const bookingRows = reservations.map(r => {
       const paid = payments
         .filter(p => p.reservationId === r.id && p.type === "payment")
         .reduce((s, p) => s + Number(p.amount), 0);
-      return row(
-        str(r.room?.roomNumber ?? ""),
-        str(r.room?.roomType ?? ""),
-        str(r.guest?.fullName ?? ""),
-        str(r.guest?.phone ?? ""),
-        str(r.stayType === "short_rest" ? "Short Rest" : "Lodge"),
-        str(r.checkInDate),
-        str(r.checkOutDate),
-        r.stayType === "short_rest" ? num(r.durationHours ?? 1) : str(""),
-        num(paid),
-      );
-    }).join("\n");
-
-    const bookingsSheet = `
-    <Worksheet ss:Name="Bookings">
-      <Table ss:DefaultColumnWidth="120">
-        ${row(header("Room No."), header("Room Type"), header("Guest Name"), header("Phone"), header("Stay Type"), header("Check-in"), header("Check-out"), header("Duration (hrs)"), header("Amount Paid (N)"))}
-        ${bookingRows}
-      </Table>
-    </Worksheet>`;
+      return [
+        r.room?.roomNumber ?? "",
+        r.room?.roomType ?? "",
+        r.guest?.fullName ?? "",
+        r.guest?.phone ?? "",
+        r.stayType === "short_rest" ? "Short Rest" : "Lodge",
+        // Check-in/out are date-only strings (YYYY-MM-DD); treat as string to preserve them
+        r.checkInDate ?? "",
+        r.checkOutDate ?? "",
+        r.stayType === "short_rest" ? fmtNum(r.durationHours ?? 1) : null,
+        paid,
+      ];
+    });
+    const wsBookings = XLSX.utils.aoa_to_sheet([bookingHeaders, ...bookingRows]);
+    wsBookings["!cols"] = bookingHeaders.map((_, i) => ({ wch: i >= 5 && i <= 6 ? 14 : 18 }));
+    XLSX.utils.book_append_sheet(wb, wsBookings, "Bookings");
 
     // ── Sheet 3: Payments ─────────────────────────────────────────────────────
-    const payRows = payments.map(p =>
-      row(
-        str(fmtDate(p.createdAt)),
-        str(p.method.replace(/_/g, " ")),
-        str(p.type),
-        num(p.amount),
-        str(p.transactionId ?? ""),
-        str(p.receptionistName),
-      )
-    ).join("\n");
-
-    const paymentsSheet = `
-    <Worksheet ss:Name="Payments">
-      <Table ss:DefaultColumnWidth="130">
-        ${row(header("Date / Time"), header("Method"), header("Type"), header("Amount (N)"), header("Transaction ID"), header("Receptionist"))}
-        ${payRows}
-      </Table>
-    </Worksheet>`;
-
-    // ── Assemble workbook XML ─────────────────────────────────────────────────
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:x="urn:schemas-microsoft-com:office:excel">
-<Styles>
-  <Style ss:ID="header">
-    <Font ss:Bold="1"/>
-    <Interior ss:Color="#1a1a2e" ss:Pattern="Solid"/>
-    <Font ss:Bold="1" ss:Color="#FFFFFF"/>
-  </Style>
-</Styles>
-${summarySheet}
-${bookingsSheet}
-${paymentsSheet}
-</Workbook>`;
+    const payHeaders = ["Date / Time", "Method", "Type", "Amount (\u20a6)", "Transaction ID", "Receptionist"];
+    const payRows = payments.map(p => [
+      dateCellVal(p.createdAt),
+      p.method.replace(/_/g, " "),
+      p.type,
+      fmtNum(p.amount),
+      p.transactionId ?? "",
+      p.receptionistName,
+    ]);
+    const wsPayments = XLSX.utils.aoa_to_sheet([payHeaders, ...payRows] as any[][]);
+    wsPayments["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 22 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, wsPayments, "Payments");
 
     // ── Trigger download ──────────────────────────────────────────────────────
-    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const filename = `shift-report-${shift.receptionistName.replace(/\s+/g, "-")}-${date}.xls`;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = `shift-report-${safeName(shift.receptionistName)}-${date}.xlsx`;
+    XLSX.writeFile(wb, filename);
   }
 
   const cards = summary
