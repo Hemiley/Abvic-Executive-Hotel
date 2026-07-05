@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings } from "../lib/api";
 
+// ── HTML escape helper — prevents XSS from user-controlled data in report ─────
+function esc(value: string | number | null | undefined): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ── Printable report generator ────────────────────────────────────────────────
 function generateReportHtml(data: {
   shift: Shift;
@@ -21,12 +31,12 @@ function generateReportHtml(data: {
     .map(
       (r) => `
       <tr>
-        <td>${r.room?.roomNumber ?? "—"}</td>
-        <td>${r.room?.roomType ?? "—"}</td>
-        <td>${r.guest?.fullName ?? "—"}</td>
-        <td>${r.stayType === "short_rest" ? `Short Rest (${r.durationHours ?? 1}h)` : "Lodge"}</td>
-        <td>${r.checkInDate}</td>
-        <td>${r.checkOutDate}</td>
+        <td>${esc(r.room?.roomNumber ?? "—")}</td>
+        <td>${esc(r.room?.roomType ?? "—")}</td>
+        <td>${esc(r.guest?.fullName ?? "—")}</td>
+        <td>${r.stayType === "short_rest" ? `Short Rest (${esc(r.durationHours ?? 1)}h)` : "Lodge"}</td>
+        <td>${esc(r.checkInDate)}</td>
+        <td>${esc(r.checkOutDate)}</td>
         <td style="text-align:right">${fmt(payments.filter((p) => p.reservationId === r.id && p.type === "payment").reduce((s, p) => s + Number(p.amount), 0))}</td>
       </tr>`
     )
@@ -36,9 +46,9 @@ function generateReportHtml(data: {
     .map(
       (p) => `
       <tr>
-        <td>${fmtDate(p.createdAt)}</td>
-        <td style="text-transform:capitalize">${p.method.replace("_", " ")}</td>
-        <td style="text-transform:capitalize">${p.type}</td>
+        <td>${esc(fmtDate(p.createdAt))}</td>
+        <td style="text-transform:capitalize">${esc(p.method.replace(/_/g, " "))}</td>
+        <td style="text-transform:capitalize">${esc(p.type)}</td>
         <td style="text-align:right">${fmt(p.amount)}</td>
       </tr>`
     )
@@ -48,7 +58,7 @@ function generateReportHtml(data: {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Shift Report — ${settings.hotelName}</title>
+<title>Shift Report — ${esc(settings.hotelName)}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#fff;padding:32px;font-size:13px}
@@ -83,14 +93,14 @@ function generateReportHtml(data: {
 <body>
 <div class="header">
   <div>
-    <div class="hotel-name">${settings.hotelName}</div>
+    <div class="hotel-name">${esc(settings.hotelName)}</div>
     <div class="report-title">End-of-Shift Report &nbsp;<span class="badge">OFFICIAL</span></div>
   </div>
   <div class="meta">
-    <div><strong>Receptionist:</strong> ${shift.receptionistName}</div>
-    <div><strong>Shift Start:</strong> ${fmtDate(shift.loginTime)}</div>
-    <div><strong>Shift End:</strong> ${fmtDate(shift.logoutTime)}</div>
-    <div><strong>Report Generated:</strong> ${new Date().toLocaleString("en-NG")}</div>
+    <div><strong>Receptionist:</strong> ${esc(shift.receptionistName)}</div>
+    <div><strong>Shift Start:</strong> ${esc(fmtDate(shift.loginTime))}</div>
+    <div><strong>Shift End:</strong> ${esc(fmtDate(shift.logoutTime))}</div>
+    <div><strong>Report Generated:</strong> ${esc(new Date().toLocaleString("en-NG"))}</div>
   </div>
 </div>
 
@@ -173,7 +183,7 @@ ${payments.length > 0 ? `
 </table>` : ""}
 
 <div class="footer">
-  <span>${settings.hotelName} — Confidential Shift Report</span>
+  <span>${esc(settings.hotelName)} — Confidential Shift Report</span>
   <span>Receptionist Signature: ___________________________</span>
 </div>
 </body>
@@ -249,8 +259,10 @@ export default function Dashboard() {
   function handlePrintReport() {
     if (!reportData) return;
     const html = generateReportHtml(reportData);
-    const win = window.open("", "_blank", "width=900,height=700");
+    // noopener prevents the report window from accessing window.opener
+    const win = window.open("", "_blank", "width=900,height=700,noopener,noreferrer");
     if (!win) return;
+    win.opener = null;
     win.document.write(html);
     win.document.close();
     win.focus();
