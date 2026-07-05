@@ -86,6 +86,12 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection (non-fatal):", reason);
 });
 
+// Public health-check — must be registered before auth-protected routes.
+// Railway (and any load-balancer) hits this to verify the server is up.
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 registerRoutes(app);
 
 // Global error handler — catches unhandled async errors forwarded via next(err)
