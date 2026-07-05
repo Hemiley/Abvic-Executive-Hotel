@@ -30,11 +30,11 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-// Always trust the Replit proxy (it terminates TLS for all environments)
+// Trust the first proxy hop — required for Railway, Replit, and any reverse-proxy host.
 app.set("trust proxy", 1);
 
-// Detect whether we are running inside the Replit hosted environment
-// (both dev preview and deployed production run behind Replit's HTTPS proxy)
+// Replit iframe preview requires sameSite "none"; every other environment
+// (Railway, plain localhost, production) works fine with "lax".
 const behindReplitProxy = !!process.env.REPLIT_DEV_DOMAIN || !!process.env.REPLIT_DEPLOYMENT_ID;
 
 app.use(
@@ -49,12 +49,9 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      // Mark secure whenever we're behind the Replit HTTPS proxy or in production
-      secure: isProd || behindReplitProxy,
-      // SameSite=none is required for cookies to be sent in the Replit proxied
-      // iframe preview; fall back to lax for plain localhost development
-      sameSite: behindReplitProxy ? "none" : "lax",
-      maxAge: 1000 * 60 * 60 * 24 * 7,
+      secure: isProd || behindReplitProxy,           // HTTPS in prod / Replit
+      sameSite: behindReplitProxy ? "none" : "lax",  // "none" only for Replit iframe
+      maxAge: 1000 * 60 * 60 * 24 * 7,              // 7 days
     },
   })
 );
