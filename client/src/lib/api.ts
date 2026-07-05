@@ -186,6 +186,11 @@ export const api = {
     request<Room>(`/api/rooms/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   createBooking: (data: any) => request<any>("/api/bookings", { method: "POST", body: JSON.stringify(data) }),
+  createMultiRoomBooking: (data: any) =>
+    request<{ reservations: Reservation[]; guest: Guest; rooms: Room[] }>(
+      "/api/bookings/multi",
+      { method: "POST", body: JSON.stringify(data) }
+    ),
   getReservations: () => request<Reservation[]>("/api/reservations"),
   updateReservation: (id: string, data: Partial<Reservation>) =>
     request<Reservation>(`/api/reservations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

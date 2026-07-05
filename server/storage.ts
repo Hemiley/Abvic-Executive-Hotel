@@ -204,6 +204,8 @@ export const storage = {
       address?: string;
       emergencyContact?: string;
     };
+    /** When set, reuse an existing guest record instead of creating a new one. */
+    existingGuestId?: string;
     roomId: string;
     checkInDate: string;
     checkOutDate: string;
@@ -237,8 +239,19 @@ export const storage = {
         throw Object.assign(new Error("Room is not available"), { statusCode: 409 });
       }
 
-      // Create guest
-      const [guest] = await txDb.insert(guests).values(data.guestData).returning();
+      // Reuse existing guest or create a new one
+      let guest: Guest;
+      if (data.existingGuestId) {
+        const rows = await txDb.select().from(guests).where(eq(guests.id, data.existingGuestId));
+        if (!rows[0]) {
+          await client.query("ROLLBACK");
+          throw Object.assign(new Error("Existing guest not found"), { statusCode: 404 });
+        }
+        guest = rows[0];
+      } else {
+        const [created] = await txDb.insert(guests).values(data.guestData).returning();
+        guest = created;
+      }
 
       // Create reservation
       const [reservation] = await txDb
@@ -269,6 +282,104 @@ export const storage = {
 
       await client.query("COMMIT");
       return { reservation, guest, room: updatedRoom };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Books multiple rooms for a single guest in one atomic transaction.
+   * Rooms are locked in sorted-ID order to prevent deadlocks when two
+   * concurrent requests try to book overlapping room sets.
+   */
+  async createMultiRoomBookingTransactional(data: {
+    guestData: {
+      fullName: string;
+      phone: string;
+      email?: string;
+      nationality?: string;
+      idType?: string;
+      idNumber?: string;
+      address?: string;
+      emergencyContact?: string;
+    };
+    roomIds: string[];
+    checkInDate: string;
+    checkOutDate: string;
+    numGuests: number;
+    specialRequests?: string;
+    status: string;
+    source: string;
+    stayType?: string;
+    durationHours?: number;
+    receptionistId: string;
+    shiftId?: string;
+  }): Promise<{ reservations: Reservation[]; guest: Guest; rooms: Room[] }> {
+    const sortedIds = [...data.roomIds].sort(); // consistent lock order → no deadlocks
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const txDb = drizzle(client, { schema });
+
+      // Lock all rooms in sorted order and validate availability
+      const lockedRooms: Room[] = [];
+      for (const roomId of sortedIds) {
+        const rows = await txDb.select().from(rooms).where(eq(rooms.id, roomId)).for("update");
+        if (!rows[0]) {
+          await client.query("ROLLBACK");
+          throw Object.assign(new Error(`Room not found: ${roomId}`), { statusCode: 404 });
+        }
+        if (rows[0].status !== "available") {
+          await client.query("ROLLBACK");
+          throw Object.assign(
+            new Error(`Room ${rows[0].roomNumber} is not available`),
+            { statusCode: 409 }
+          );
+        }
+        lockedRooms.push(rows[0]);
+      }
+
+      // Create guest once
+      const [guest] = await txDb.insert(guests).values(data.guestData).returning();
+
+      // Create one reservation per room + update room status
+      const newRoomStatus = data.source === "walk_in" ? "occupied" : "reserved";
+      const createdReservations: Reservation[] = [];
+      const updatedRooms: Room[] = [];
+
+      for (const room of lockedRooms) {
+        const [reservation] = await txDb
+          .insert(reservations)
+          .values({
+            guestId: guest.id,
+            roomId: room.id,
+            checkInDate: data.checkInDate,
+            checkOutDate: data.checkOutDate,
+            numGuests: data.numGuests,
+            specialRequests: data.specialRequests,
+            status: data.status,
+            source: data.source,
+            stayType: data.stayType ?? "lodge",
+            durationHours: data.durationHours ?? null,
+            receptionistId: data.receptionistId,
+            shiftId: data.shiftId,
+          })
+          .returning();
+        createdReservations.push(reservation);
+
+        const [updatedRoom] = await txDb
+          .update(rooms)
+          .set({ status: newRoomStatus })
+          .where(eq(rooms.id, room.id))
+          .returning();
+        updatedRooms.push(updatedRoom);
+      }
+
+      await client.query("COMMIT");
+      return { reservations: createdReservations, guest, rooms: updatedRooms };
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;

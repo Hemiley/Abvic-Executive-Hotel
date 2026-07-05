@@ -169,6 +169,21 @@ export const createBookingSchema = z.object({
   source: z.enum(["walk_in", "reservation"]).default("walk_in"),
   stayType: z.enum(["lodge", "short_rest"]).default("lodge"),
   durationHours: z.number().min(1).max(24).optional(),
+  /** Pass the guest ID from a previous booking to share one guest record across multiple rooms. */
+  existingGuestId: z.string().uuid().optional(),
+});
+
+/** Atomic booking for one guest across multiple rooms in a single request. */
+export const createMultiRoomBookingSchema = z.object({
+  guest: guestSchema,
+  roomIds: z.array(z.string().uuid()).min(1).max(10),
+  checkInDate: z.string().min(1),
+  checkOutDate: z.string().optional(),
+  numGuests: z.number().min(1).default(1),
+  specialRequests: z.string().optional(),
+  source: z.enum(["walk_in", "reservation"]).default("walk_in"),
+  stayType: z.enum(["lodge", "short_rest"]).default("lodge"),
+  durationHours: z.number().min(1).max(24).optional(),
 });
 
 export const updateReservationSchema = z.object({

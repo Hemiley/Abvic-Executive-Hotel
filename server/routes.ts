@@ -8,6 +8,7 @@ import {
   insertRoomSchema,
   updateRoomSchema,
   createBookingSchema,
+  createMultiRoomBookingSchema,
   updateReservationSchema,
   createPaymentSchema,
   createReceptionistSchema,
@@ -354,7 +355,7 @@ export function registerRoutes(app: Express) {
   app.post("/api/bookings", requireAuth, async (req, res, next) => {
     const parsed = createBookingSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid booking data" });
-    const { guest, roomId, checkInDate, numGuests, specialRequests, source, stayType, durationHours } = parsed.data;
+    const { guest, roomId, checkInDate, numGuests, specialRequests, source, stayType, durationHours, existingGuestId } = parsed.data;
 
     // For short_rest, checkout = same day; for lodge use provided date
     const checkOutDate = stayType === "short_rest"
@@ -377,6 +378,7 @@ export function registerRoutes(app: Express) {
           address: guest.address,
           emergencyContact: guest.emergencyContact,
         },
+        existingGuestId,
         roomId,
         checkInDate,
         checkOutDate,
@@ -416,6 +418,70 @@ export function registerRoutes(app: Express) {
     });
 
     res.status(201).json({ reservation, guest: guestRecord, room });
+  });
+
+  // ---------- Multi-room atomic booking ----------
+  app.post("/api/bookings/multi", requireAuth, async (req, res, next) => {
+    const parsed = createMultiRoomBookingSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid booking data" });
+
+    const { guest, roomIds, checkInDate, numGuests, specialRequests, source, stayType, durationHours } = parsed.data;
+    const checkOutDate = stayType === "short_rest"
+      ? checkInDate
+      : (parsed.data.checkOutDate ?? checkInDate);
+
+    const shift = await storage.getActiveShiftForReceptionist(req.session.receptionistId!);
+    const status = source === "walk_in" ? "checked_in" : "pending";
+
+    let result: { reservations: any[]; guest: any; rooms: any[] };
+    try {
+      result = await storage.createMultiRoomBookingTransactional({
+        guestData: {
+          fullName: guest.fullName,
+          phone: guest.phone,
+          email: guest.email || undefined,
+          nationality: guest.nationality,
+          idType: guest.idType,
+          idNumber: guest.idNumber,
+          address: guest.address,
+          emergencyContact: guest.emergencyContact,
+        },
+        roomIds,
+        checkInDate,
+        checkOutDate,
+        numGuests,
+        specialRequests,
+        status,
+        source,
+        stayType,
+        durationHours,
+        receptionistId: req.session.receptionistId!,
+        shiftId: shift?.id,
+      });
+    } catch (err: any) {
+      if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+      return next(err);
+    }
+
+    if (shift) {
+      await storage.incrementShiftStats(shift.id, { guestsServed: 1, roomsBooked: result.rooms.length });
+    }
+
+    const stayLabel = stayType === "short_rest" ? `Short Rest (${durationHours ?? 1}h)` : "Lodge";
+    const roomNumbers = result.rooms.map((r: any) => `Room ${r.roomNumber}`).join(", ");
+
+    await storage.createNotification({
+      type: source === "walk_in" ? "guest_arrival" : "new_reservation",
+      message: `${source === "walk_in" ? "Walk-in guest" : "New reservation"} [${stayLabel}]: ${guest.fullName} — ${roomNumbers}`,
+    });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: source === "walk_in" ? "walk_in_booking" : "reservation_created",
+      details: `${guest.fullName} booked ${roomNumbers} — ${stayLabel}`,
+    });
+
+    res.status(201).json(result);
   });
 
   app.get("/api/reservations", requireAuth, async (_req, res) => {
