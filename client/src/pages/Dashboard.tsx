@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings } from "../lib/api";
+import * as XLSX from "xlsx";
 
 // ── HTML escape helper — prevents XSS from user-controlled data in report ─────
 function esc(value: string | number | null | undefined): string {
@@ -272,17 +273,90 @@ export default function Dashboard() {
     }, 400);
   }
 
-  function handleDownloadReport() {
+  function handleDownloadExcel() {
     if (!reportData) return;
-    const html = generateReportHtml(reportData);
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const date = new Date(reportData.shift.loginTime).toISOString().slice(0, 10);
-    a.download = `shift-report-${reportData.shift.receptionistName.replace(/\s+/g, "-")}-${date}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { shift, payments, reservations, settings } = reportData;
+    const date = new Date(shift.loginTime).toISOString().slice(0, 10);
+    const fmt = (n: string | number | null | undefined) => Number(n ?? 0);
+    const fmtDate = (d: string | null | undefined) =>
+      d ? new Date(d).toLocaleString("en-NG") : "";
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Summary ──────────────────────────────────────────────────────
+    const summaryRows = [
+      [settings.hotelName],
+      ["End-of-Shift Report"],
+      [],
+      ["Receptionist", shift.receptionistName],
+      ["Shift Start", fmtDate(shift.loginTime)],
+      ["Shift End", fmtDate(shift.logoutTime)],
+      ["Report Date", fmtDate(new Date().toISOString())],
+      [],
+      ["SHIFT SUMMARY"],
+      ["Guests Served", shift.guestsServed],
+      ["Rooms Booked", shift.roomsBooked],
+      ["Reservations Processed", shift.reservationsProcessed],
+      [],
+      ["CASH RECONCILIATION"],
+      ["Opening Balance (₦)", fmt(shift.openingBalance)],
+      ["Closing Balance (₦)", fmt(shift.closingBalance)],
+      ["Cash Variance (₦)", fmt(shift.cashVariance)],
+      [],
+      ["SALES BREAKDOWN"],
+      ["Total Sales (₦)", fmt(shift.totalSales)],
+      ["Cash Sales (₦)", fmt(shift.cashSales)],
+      ["Card / POS Sales (₦)", fmt(shift.cardSales)],
+      ["Bank Transfer Sales (₦)", fmt(shift.transferSales)],
+      ["Discounts Given (₦)", fmt(shift.discountsGiven)],
+      ["Refunds Issued (₦)", fmt(shift.refundsIssued)],
+      ["Net Revenue (₦)",
+        payments.filter(p => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0) -
+        payments.filter(p => p.type === "refund").reduce((s, p) => s + Number(p.amount), 0)],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+    wsSummary["!cols"] = [{ wch: 28 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+    // ── Sheet 2: Bookings ─────────────────────────────────────────────────────
+    const bookingHeader = ["Room No.", "Room Type", "Guest Name", "Phone", "Stay Type", "Check-in", "Check-out", "Duration (hrs)", "Amount Paid (₦)"];
+    const bookingData = reservations.map(r => {
+      const paid = payments
+        .filter(p => p.reservationId === r.id && p.type === "payment")
+        .reduce((s, p) => s + Number(p.amount), 0);
+      return [
+        r.room?.roomNumber ?? "",
+        r.room?.roomType ?? "",
+        r.guest?.fullName ?? "",
+        r.guest?.phone ?? "",
+        r.stayType === "short_rest" ? "Short Rest" : "Lodge",
+        r.checkInDate,
+        r.checkOutDate,
+        r.stayType === "short_rest" ? (r.durationHours ?? 1) : "",
+        paid,
+      ];
+    });
+    const wsBookings = XLSX.utils.aoa_to_sheet([bookingHeader, ...bookingData]);
+    wsBookings["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsBookings, "Bookings");
+
+    // ── Sheet 3: Payments ─────────────────────────────────────────────────────
+    const payHeader = ["Date / Time", "Method", "Type", "Amount (₦)", "Transaction ID", "Receptionist"];
+    const payData = payments.map(p => [
+      fmtDate(p.createdAt),
+      p.method.replace(/_/g, " "),
+      p.type,
+      Number(p.amount),
+      p.transactionId ?? "",
+      p.receptionistName,
+    ]);
+    const wsPayments = XLSX.utils.aoa_to_sheet([payHeader, ...payData]);
+    wsPayments["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 22 }];
+    XLSX.utils.book_append_sheet(wb, wsPayments, "Payments");
+
+    // ── Write & trigger download ──────────────────────────────────────────────
+    const filename = `shift-report-${shift.receptionistName.replace(/\s+/g, "-")}-${date}.xlsx`;
+    XLSX.writeFile(wb, filename);
   }
 
   const cards = summary
@@ -486,8 +560,8 @@ export default function Dashboard() {
               <button className="btn" style={{ flex: 1 }} onClick={handlePrintReport}>
                 🖨️ Print Report
               </button>
-              <button className="btn secondary" style={{ flex: 1 }} onClick={handleDownloadReport}>
-                ⬇️ Download HTML
+              <button className="btn secondary" style={{ flex: 1 }} onClick={handleDownloadExcel}>
+                📊 Download Excel
               </button>
             </div>
 
