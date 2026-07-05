@@ -191,6 +191,8 @@ export const api = {
   createRoom: (data: Partial<Room>) => request<Room>("/api/rooms", { method: "POST", body: JSON.stringify(data) }),
   updateRoom: (id: string, data: Partial<Room>) =>
     request<Room>(`/api/rooms/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteRoom: (id: string) =>
+    request<{ ok: boolean }>(`/api/rooms/${id}`, { method: "DELETE" }),
 
   createBooking: (data: any) => request<any>("/api/bookings", { method: "POST", body: JSON.stringify(data) }),
   createMultiRoomBooking: (data: any) =>

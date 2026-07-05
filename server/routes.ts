@@ -378,6 +378,18 @@ export function registerRoutes(app: Express) {
     res.json(room);
   });
 
+  app.delete("/api/rooms/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteRoom(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Room not found" });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "room_deleted",
+      details: `Room ID ${req.params.id} deleted`,
+    });
+    res.json({ ok: true });
+  });
+
   // ---------- Bookings / Reservations ----------
   app.post("/api/bookings", requireAuth, async (req, res, next) => {
     const parsed = createBookingSchema.safeParse(req.body);

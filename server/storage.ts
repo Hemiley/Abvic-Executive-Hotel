@@ -156,6 +156,10 @@ export const storage = {
     const [r] = await db.update(rooms).set(payload).where(eq(rooms.id, id)).returning();
     return r;
   },
+  async deleteRoom(id: string): Promise<boolean> {
+    const result = await db.delete(rooms).where(eq(rooms.id, id)).returning();
+    return result.length > 0;
+  },
   async setRoomStatus(id: string, status: string) {
     await db.update(rooms).set({ status }).where(eq(rooms.id, id));
   },

@@ -104,6 +104,7 @@ export default function Rooms() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState({
     roomNumber: "",
     roomType: "Standard Room",
@@ -203,6 +204,16 @@ export default function Rooms() {
     }
   }
 
+  async function handleDelete(room: Room) {
+    if (!window.confirm(`Delete Room ${room.roomNumber} (${room.roomType})? This cannot be undone.`)) return;
+    try {
+      await api.deleteRoom(room.id);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   async function handleEditSave(e: React.FormEvent) {
     e.preventDefault();
     if (!editing) return;
@@ -290,9 +301,24 @@ export default function Rooms() {
                   <option value="maintenance">Maintenance</option>
                 </select>
                 {isAdmin && (
-                  <button className="btn secondary full room-edit-btn" onClick={() => openEdit(room)}>
-                    Edit Room
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                    <button
+                      className="btn secondary full room-edit-btn"
+                      style={{ flex: 1 }}
+                      onClick={() => openEdit(room)}
+                    >
+                      Edit Room
+                    </button>
+                    <button
+                      className="btn full"
+                      style={{ flex: 1, background: "var(--danger, #e53e3e)", borderColor: "var(--danger, #e53e3e)" }}
+                      onClick={() => handleDelete(room)}
+                      disabled={deletingId === room.id}
+                      title="Delete this room"
+                    >
+                      🗑 Delete
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
