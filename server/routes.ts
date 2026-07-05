@@ -282,6 +282,33 @@ export function registerRoutes(app: Express) {
     res.json(all);
   });
 
+  // Shift report — returns everything needed to render a printable end-of-shift report
+  app.get("/api/shifts/:id/report", requireAuth, async (req, res) => {
+    const shift = await storage.getShiftById(req.params.id);
+    if (!shift) return res.status(404).json({ message: "Shift not found" });
+    // Receptionists can only see their own shift reports
+    if (req.session.role === "receptionist" && shift.receptionistId !== req.session.receptionistId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const [shiftPayments, shiftReservations, settings] = await Promise.all([
+      storage.getPaymentsByShift(shift.id),
+      storage.getReservationsByShift(shift.id),
+      storage.getHotelSettings(),
+    ]);
+
+    // Enrich reservations with guest + room data
+    const enriched = await Promise.all(
+      shiftReservations.map(async (r) => ({
+        ...r,
+        guest: await storage.getGuestById(r.guestId),
+        room: await storage.getRoomById(r.roomId),
+      }))
+    );
+
+    res.json({ shift, payments: shiftPayments, reservations: enriched, settings });
+  });
+
   app.post("/api/shifts/:id/close", requireAuth, async (req, res) => {
     const parsed = closeShiftSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid closing balance" });

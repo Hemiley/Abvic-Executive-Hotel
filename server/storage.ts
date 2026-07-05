@@ -442,6 +442,12 @@ export const storage = {
   async getPaymentsByReservation(reservationId: string): Promise<Payment[]> {
     return db.select().from(payments).where(eq(payments.reservationId, reservationId));
   },
+  async getPaymentsByShift(shiftId: string): Promise<Payment[]> {
+    return db.select().from(payments).where(eq(payments.shiftId, shiftId)).orderBy(desc(payments.createdAt));
+  },
+  async getReservationsByShift(shiftId: string): Promise<Reservation[]> {
+    return db.select().from(reservations).where(eq(reservations.shiftId, shiftId)).orderBy(desc(reservations.createdAt));
+  },
 
   // Audit log
   async logAction(data: { receptionistId?: string; receptionistName?: string; action: string; details?: string }) {

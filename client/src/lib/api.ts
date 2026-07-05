@@ -179,6 +179,13 @@ export const api = {
   getShifts: () => request<Shift[]>("/api/shifts"),
   closeShift: (id: string, closingBalance: number) =>
     request<Shift>(`/api/shifts/${id}/close`, { method: "POST", body: JSON.stringify({ closingBalance }) }),
+  getShiftReport: (id: string) =>
+    request<{
+      shift: Shift;
+      payments: Payment[];
+      reservations: (Reservation & { guest?: Guest; room?: Room })[];
+      settings: HotelSettings;
+    }>(`/api/shifts/${id}/report`),
 
   getRooms: () => request<Room[]>("/api/rooms"),
   createRoom: (data: Partial<Room>) => request<Room>("/api/rooms", { method: "POST", body: JSON.stringify(data) }),
