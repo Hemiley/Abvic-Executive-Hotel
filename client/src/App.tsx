@@ -64,7 +64,7 @@ function AppRoutes() {
       <Route
         path="/reports"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute adminOnly>
             <Reports />
           </ProtectedRoute>
         }
