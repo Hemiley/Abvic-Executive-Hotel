@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings } from "../lib/api";
-import * as XLSX from "xlsx";
 
 // ── HTML escape helper — prevents XSS from user-controlled data in report ─────
 function esc(value: string | number | null | undefined): string {
@@ -273,90 +272,137 @@ export default function Dashboard() {
     }, 400);
   }
 
+  // Pure SpreadsheetML Excel export — no npm dependency needed
   function handleDownloadExcel() {
     if (!reportData) return;
     const { shift, payments, reservations, settings } = reportData;
     const date = new Date(shift.loginTime).toISOString().slice(0, 10);
-    const fmt = (n: string | number | null | undefined) => Number(n ?? 0);
+    const fmtNum = (n: string | number | null | undefined) => Number(n ?? 0);
     const fmtDate = (d: string | null | undefined) =>
       d ? new Date(d).toLocaleString("en-NG") : "";
 
-    const wb = XLSX.utils.book_new();
+    // SpreadsheetML cell helpers
+    const xmlEsc = (v: string | number | null | undefined) =>
+      String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const str = (v: string | number | null | undefined) =>
+      `<Cell><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`;
+    const num = (v: string | number | null | undefined) =>
+      `<Cell><Data ss:Type="Number">${fmtNum(v)}</Data></Cell>`;
+    const header = (v: string) =>
+      `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlEsc(v)}</Data></Cell>`;
+    const row = (...cells: string[]) => `<Row>${cells.join("")}</Row>`;
+    const emptyRow = () => `<Row/>`;
+
+    const netRevenue =
+      payments.filter(p => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0) -
+      payments.filter(p => p.type === "refund").reduce((s, p) => s + Number(p.amount), 0);
 
     // ── Sheet 1: Summary ──────────────────────────────────────────────────────
-    const summaryRows = [
-      [settings.hotelName],
-      ["End-of-Shift Report"],
-      [],
-      ["Receptionist", shift.receptionistName],
-      ["Shift Start", fmtDate(shift.loginTime)],
-      ["Shift End", fmtDate(shift.logoutTime)],
-      ["Report Date", fmtDate(new Date().toISOString())],
-      [],
-      ["SHIFT SUMMARY"],
-      ["Guests Served", shift.guestsServed],
-      ["Rooms Booked", shift.roomsBooked],
-      ["Reservations Processed", shift.reservationsProcessed],
-      [],
-      ["CASH RECONCILIATION"],
-      ["Opening Balance (₦)", fmt(shift.openingBalance)],
-      ["Closing Balance (₦)", fmt(shift.closingBalance)],
-      ["Cash Variance (₦)", fmt(shift.cashVariance)],
-      [],
-      ["SALES BREAKDOWN"],
-      ["Total Sales (₦)", fmt(shift.totalSales)],
-      ["Cash Sales (₦)", fmt(shift.cashSales)],
-      ["Card / POS Sales (₦)", fmt(shift.cardSales)],
-      ["Bank Transfer Sales (₦)", fmt(shift.transferSales)],
-      ["Discounts Given (₦)", fmt(shift.discountsGiven)],
-      ["Refunds Issued (₦)", fmt(shift.refundsIssued)],
-      ["Net Revenue (₦)",
-        payments.filter(p => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0) -
-        payments.filter(p => p.type === "refund").reduce((s, p) => s + Number(p.amount), 0)],
-    ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-    wsSummary["!cols"] = [{ wch: 28 }, { wch: 22 }];
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+    const summarySheet = `
+    <Worksheet ss:Name="Summary">
+      <Table ss:DefaultColumnWidth="160">
+        ${row(str(settings.hotelName))}
+        ${row(str("End-of-Shift Report"))}
+        ${emptyRow()}
+        ${row(str("Receptionist"), str(shift.receptionistName))}
+        ${row(str("Shift Start"), str(fmtDate(shift.loginTime)))}
+        ${row(str("Shift End"), str(fmtDate(shift.logoutTime)))}
+        ${row(str("Report Date"), str(fmtDate(new Date().toISOString())))}
+        ${emptyRow()}
+        ${row(str("SHIFT SUMMARY"))}
+        ${row(str("Guests Served"), num(shift.guestsServed))}
+        ${row(str("Rooms Booked"), num(shift.roomsBooked))}
+        ${row(str("Reservations Processed"), num(shift.reservationsProcessed))}
+        ${emptyRow()}
+        ${row(str("CASH RECONCILIATION"))}
+        ${row(str("Opening Balance (N)"), num(shift.openingBalance))}
+        ${row(str("Closing Balance (N)"), num(shift.closingBalance))}
+        ${row(str("Cash Variance (N)"), num(shift.cashVariance))}
+        ${emptyRow()}
+        ${row(str("SALES BREAKDOWN"))}
+        ${row(str("Total Sales (N)"), num(shift.totalSales))}
+        ${row(str("Cash Sales (N)"), num(shift.cashSales))}
+        ${row(str("Card / POS Sales (N)"), num(shift.cardSales))}
+        ${row(str("Bank Transfer Sales (N)"), num(shift.transferSales))}
+        ${row(str("Discounts Given (N)"), num(shift.discountsGiven))}
+        ${row(str("Refunds Issued (N)"), num(shift.refundsIssued))}
+        ${row(str("Net Revenue (N)"), num(netRevenue))}
+      </Table>
+    </Worksheet>`;
 
     // ── Sheet 2: Bookings ─────────────────────────────────────────────────────
-    const bookingHeader = ["Room No.", "Room Type", "Guest Name", "Phone", "Stay Type", "Check-in", "Check-out", "Duration (hrs)", "Amount Paid (₦)"];
-    const bookingData = reservations.map(r => {
+    const bookingRows = reservations.map(r => {
       const paid = payments
         .filter(p => p.reservationId === r.id && p.type === "payment")
         .reduce((s, p) => s + Number(p.amount), 0);
-      return [
-        r.room?.roomNumber ?? "",
-        r.room?.roomType ?? "",
-        r.guest?.fullName ?? "",
-        r.guest?.phone ?? "",
-        r.stayType === "short_rest" ? "Short Rest" : "Lodge",
-        r.checkInDate,
-        r.checkOutDate,
-        r.stayType === "short_rest" ? (r.durationHours ?? 1) : "",
-        paid,
-      ];
-    });
-    const wsBookings = XLSX.utils.aoa_to_sheet([bookingHeader, ...bookingData]);
-    wsBookings["!cols"] = [{ wch: 10 }, { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, wsBookings, "Bookings");
+      return row(
+        str(r.room?.roomNumber ?? ""),
+        str(r.room?.roomType ?? ""),
+        str(r.guest?.fullName ?? ""),
+        str(r.guest?.phone ?? ""),
+        str(r.stayType === "short_rest" ? "Short Rest" : "Lodge"),
+        str(r.checkInDate),
+        str(r.checkOutDate),
+        r.stayType === "short_rest" ? num(r.durationHours ?? 1) : str(""),
+        num(paid),
+      );
+    }).join("\n");
+
+    const bookingsSheet = `
+    <Worksheet ss:Name="Bookings">
+      <Table ss:DefaultColumnWidth="120">
+        ${row(header("Room No."), header("Room Type"), header("Guest Name"), header("Phone"), header("Stay Type"), header("Check-in"), header("Check-out"), header("Duration (hrs)"), header("Amount Paid (N)"))}
+        ${bookingRows}
+      </Table>
+    </Worksheet>`;
 
     // ── Sheet 3: Payments ─────────────────────────────────────────────────────
-    const payHeader = ["Date / Time", "Method", "Type", "Amount (₦)", "Transaction ID", "Receptionist"];
-    const payData = payments.map(p => [
-      fmtDate(p.createdAt),
-      p.method.replace(/_/g, " "),
-      p.type,
-      Number(p.amount),
-      p.transactionId ?? "",
-      p.receptionistName,
-    ]);
-    const wsPayments = XLSX.utils.aoa_to_sheet([payHeader, ...payData]);
-    wsPayments["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 22 }];
-    XLSX.utils.book_append_sheet(wb, wsPayments, "Payments");
+    const payRows = payments.map(p =>
+      row(
+        str(fmtDate(p.createdAt)),
+        str(p.method.replace(/_/g, " ")),
+        str(p.type),
+        num(p.amount),
+        str(p.transactionId ?? ""),
+        str(p.receptionistName),
+      )
+    ).join("\n");
 
-    // ── Write & trigger download ──────────────────────────────────────────────
-    const filename = `shift-report-${shift.receptionistName.replace(/\s+/g, "-")}-${date}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    const paymentsSheet = `
+    <Worksheet ss:Name="Payments">
+      <Table ss:DefaultColumnWidth="130">
+        ${row(header("Date / Time"), header("Method"), header("Type"), header("Amount (N)"), header("Transaction ID"), header("Receptionist"))}
+        ${payRows}
+      </Table>
+    </Worksheet>`;
+
+    // ── Assemble workbook XML ─────────────────────────────────────────────────
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:x="urn:schemas-microsoft-com:office:excel">
+<Styles>
+  <Style ss:ID="header">
+    <Font ss:Bold="1"/>
+    <Interior ss:Color="#1a1a2e" ss:Pattern="Solid"/>
+    <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+  </Style>
+</Styles>
+${summarySheet}
+${bookingsSheet}
+${paymentsSheet}
+</Workbook>`;
+
+    // ── Trigger download ──────────────────────────────────────────────────────
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const filename = `shift-report-${shift.receptionistName.replace(/\s+/g, "-")}-${date}.xls`;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const cards = summary
