@@ -43,7 +43,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           ) : (
             <span className="brand-icon">✨</span>
           )}
-          <span>{settings?.hotelName || "Grand Hotel"}</span>
+          <span>{settings?.hotelName || "AEH"}</span>
         </div>
         <nav>
           {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role || "")).map((item) => (

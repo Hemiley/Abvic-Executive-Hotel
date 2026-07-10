@@ -111,7 +111,7 @@ export const notifications = pgTable("notifications", {
 
 export const hotelSettings = pgTable("hotel_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
-  hotelName: text("hotel_name").notNull().default("Grand Hotel"),
+  hotelName: text("hotel_name").notNull().default("AEH"),
   logoUrl: text("logo_url"),
   backgroundStyle: text("background_style"),
   bgOpacity: numeric("bg_opacity").notNull().default("1"),

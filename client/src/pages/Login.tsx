@@ -44,7 +44,7 @@ export default function Login() {
           ) : (
             "✨"
           )}{" "}
-          {settings?.hotelName || "Grand Hotel"}
+          {settings?.hotelName || "AEH"}
         </div>
         <h1>Receptionist Login</h1>
         <p className="login-sub">Sign in to access the front desk console</p>

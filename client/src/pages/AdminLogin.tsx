@@ -99,7 +99,7 @@ export default function AdminLogin() {
           ) : (
             "✨"
           )}{" "}
-          {settings?.hotelName || "Grand Hotel"}
+          {settings?.hotelName || "AEH"}
         </div>
 
         <div className="admin-badge">

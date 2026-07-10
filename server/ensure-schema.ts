@@ -123,7 +123,7 @@ export async function ensureSchema(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS hotel_settings (
         id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        hotel_name            TEXT NOT NULL DEFAULT 'Grand Hotel',
+        hotel_name            TEXT NOT NULL DEFAULT 'AEH',
         logo_url              TEXT,
         background_style      TEXT,
         bg_opacity            NUMERIC NOT NULL DEFAULT 1,
