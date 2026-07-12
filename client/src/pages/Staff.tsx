@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Staff as StaffMember } from "../lib/api";
+import { api, type Staff as StaffMember, type Branch } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { fileToResizedDataUrl } from "../lib/image";
 
@@ -10,11 +10,13 @@ const emptyCreateForm = {
   email: "",
   role: "receptionist",
   avatarUrl: "",
+  branchId: "",
 };
 
 export default function Staff() {
   const { user } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
@@ -27,16 +29,24 @@ export default function Staff() {
     avatarUrl: "",
     active: true,
     password: "",
+    branchId: "",
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const branchName = (id: string | null) => (id ? branches.find((b) => b.id === id)?.name : null) || "—";
+
   function load() {
     api.getStaff().then(setStaff).catch((e) => setError(e.message));
+    api.getBranches().then((list) => {
+      setBranches(list);
+      setCreateForm((f) => ({ ...f, branchId: f.branchId || list[0]?.id || "" }));
+    }).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>, target: "create" | "edit") {
@@ -54,6 +64,10 @@ export default function Staff() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (createForm.role !== "admin" && !createForm.branchId) {
+      setError("Please select a branch for this staff member.");
+      return;
+    }
     setSaving(true);
     try {
       await api.createStaff({
@@ -63,9 +77,10 @@ export default function Staff() {
         email: createForm.email || undefined,
         role: createForm.role,
         avatarUrl: createForm.avatarUrl || undefined,
+        branchId: createForm.role === "admin" ? undefined : createForm.branchId,
       });
       setShowNew(false);
-      setCreateForm(emptyCreateForm);
+      setCreateForm({ ...emptyCreateForm, branchId: createForm.branchId });
       load();
     } catch (err: any) {
       setError(err.message);
@@ -83,6 +98,7 @@ export default function Staff() {
       avatarUrl: member.avatarUrl || "",
       active: member.active,
       password: "",
+      branchId: member.branchId || branches[0]?.id || "",
     });
   }
 
@@ -90,6 +106,10 @@ export default function Staff() {
     e.preventDefault();
     if (!editing) return;
     setError("");
+    if (editForm.role !== "admin" && !editForm.branchId) {
+      setError("Please select a branch for this staff member.");
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, any> = {
@@ -98,6 +118,7 @@ export default function Staff() {
         role: editForm.role,
         avatarUrl: editForm.avatarUrl,
         active: editForm.active,
+        branchId: editForm.role === "admin" ? null : editForm.branchId,
       };
       if (editForm.password) payload.password = editForm.password;
       await api.updateStaff(editing.id, payload);
@@ -150,6 +171,7 @@ export default function Staff() {
               <th>Username</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Branch</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -170,6 +192,7 @@ export default function Staff() {
                 <td>
                   <span className="badge status-confirmed">{member.role}</span>
                 </td>
+                <td className="muted">{member.role === "admin" ? "All branches" : branchName(member.branchId)}</td>
                 <td>
                   <span className={`badge ${member.active ? "status-available" : "status-cancelled"}`}>
                     {member.active ? "Active" : "Disabled"}
@@ -195,7 +218,7 @@ export default function Staff() {
             ))}
             {staff.length === 0 && (
               <tr>
-                <td colSpan={7}>No staff members yet.</td>
+                <td colSpan={8}>No staff members yet.</td>
               </tr>
             )}
           </tbody>
@@ -287,6 +310,21 @@ export default function Staff() {
                 onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
               />
             </div>
+            {createForm.role !== "admin" && (
+              <div className="field">
+                <label>Branch</label>
+                <select value={createForm.branchId} onChange={(e) => setCreateForm({ ...createForm, branchId: e.target.value })} required>
+                  <option value="" disabled>Select a branch…</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                {branches.length === 0 && (
+                  <p className="field-hint">No branches yet — create one under Branches first.</p>
+                )}
+              </div>
+            )}
+            {error && <p className="error-text">{error}</p>}
             <div className="modal-actions">
               <button type="button" className="btn secondary" onClick={() => setShowNew(false)}>
                 Cancel
@@ -341,6 +379,18 @@ export default function Staff() {
                 minLength={6}
               />
             </div>
+            {editForm.role !== "admin" && (
+              <div className="field">
+                <label>Branch</label>
+                <select value={editForm.branchId} onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })} required>
+                  <option value="" disabled>Select a branch…</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {error && <p className="error-text">{error}</p>}
             <div className="field checkbox-field">
               <label>
                 <input

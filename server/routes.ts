@@ -5,6 +5,8 @@ import {
   loginSchema,
   startShiftSchema,
   closeShiftSchema,
+  insertBranchSchema,
+  updateBranchSchema,
   insertRoomSchema,
   updateRoomSchema,
   createBookingSchema,
@@ -21,7 +23,14 @@ declare module "express-session" {
     receptionistId?: string;
     receptionistName?: string;
     role?: string;
+    branchId?: string | null;
   }
+}
+
+/** Admins are branch-agnostic (see everything); everyone else is scoped to their assigned branch. */
+function scopeBranchId(req: Request): string | undefined {
+  if (req.session.role === "admin") return undefined;
+  return req.session.branchId || undefined;
 }
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -75,6 +84,7 @@ export function registerRoutes(app: Express) {
     req.session.receptionistId = receptionist.id;
     req.session.receptionistName = receptionist.fullName;
     req.session.role = receptionist.role;
+    req.session.branchId = receptionist.branchId;
 
     const activeShift = await storage.getActiveShiftForReceptionist(receptionist.id);
     await storage.logAction({
@@ -89,6 +99,7 @@ export function registerRoutes(app: Express) {
       username: receptionist.username,
       fullName: receptionist.fullName,
       role: receptionist.role,
+      branchId: receptionist.branchId,
       shift: activeShift || null,
     });
   });
@@ -137,6 +148,8 @@ export function registerRoutes(app: Express) {
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     const receptionist = await storage.getReceptionistById(req.session.receptionistId!);
     if (!receptionist) return res.status(401).json({ message: "Not authenticated" });
+    // Keep the session's branch in sync in case an admin reassigned this user since login.
+    req.session.branchId = receptionist.branchId;
     const shift = await storage.getActiveShiftForReceptionist(receptionist.id);
     res.json({
       id: receptionist.id,
@@ -144,13 +157,15 @@ export function registerRoutes(app: Express) {
       fullName: receptionist.fullName,
       role: receptionist.role,
       avatarUrl: receptionist.avatarUrl,
+      branchId: receptionist.branchId,
       shift: shift || null,
     });
   });
 
   // ---------- Staff (admin only) ----------
-  app.get("/api/staff", requireAdmin, async (_req, res) => {
-    const staff = await storage.getReceptionists();
+  app.get("/api/staff", requireAdmin, async (req, res) => {
+    const branchFilter = typeof req.query.branchId === "string" ? req.query.branchId : undefined;
+    const staff = await storage.getReceptionists(branchFilter);
     res.json(
       staff.map((s) => ({
         id: s.id,
@@ -159,6 +174,7 @@ export function registerRoutes(app: Express) {
         email: s.email,
         role: s.role,
         avatarUrl: s.avatarUrl,
+        branchId: s.branchId,
         active: s.active,
         createdAt: s.createdAt,
       }))
@@ -170,6 +186,16 @@ export function registerRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
     const existing = await storage.getReceptionistByUsername(parsed.data.username);
     if (existing) return res.status(409).json({ message: "Username already taken" });
+
+    // Every receptionist/supervisor must be assigned to a branch; admins are branch-agnostic.
+    if (parsed.data.role !== "admin") {
+      if (!parsed.data.branchId) {
+        return res.status(400).json({ message: "Please select a branch for this staff member." });
+      }
+      const branch = await storage.getBranchById(parsed.data.branchId);
+      if (!branch) return res.status(400).json({ message: "Selected branch does not exist." });
+    }
+
     const passwordHash = await bcrypt.hash(parsed.data.password, 10);
     const created = await storage.createReceptionist({
       username: parsed.data.username,
@@ -178,6 +204,7 @@ export function registerRoutes(app: Express) {
       email: parsed.data.email || undefined,
       role: parsed.data.role,
       avatarUrl: parsed.data.avatarUrl,
+      branchId: parsed.data.role === "admin" ? null : parsed.data.branchId,
     });
     await storage.logAction({
       receptionistId: req.session.receptionistId,
@@ -192,6 +219,7 @@ export function registerRoutes(app: Express) {
       email: created.email,
       role: created.role,
       avatarUrl: created.avatarUrl,
+      branchId: created.branchId,
       active: created.active,
       createdAt: created.createdAt,
     });
@@ -229,6 +257,22 @@ export function registerRoutes(app: Express) {
     if (parsed.data.active !== undefined) payload.active = parsed.data.active;
     if (parsed.data.password) payload.passwordHash = await bcrypt.hash(parsed.data.password, 10);
 
+    const nextRole = parsed.data.role ?? target.role;
+    if (parsed.data.branchId !== undefined) {
+      if (nextRole !== "admin" && !parsed.data.branchId) {
+        return res.status(400).json({ message: "Please select a branch for this staff member." });
+      }
+      if (parsed.data.branchId) {
+        const branch = await storage.getBranchById(parsed.data.branchId);
+        if (!branch) return res.status(400).json({ message: "Selected branch does not exist." });
+      }
+      payload.branchId = nextRole === "admin" ? null : parsed.data.branchId;
+    } else if (nextRole === "admin") {
+      payload.branchId = null;
+    } else if (parsed.data.role !== undefined && !target.branchId) {
+      return res.status(400).json({ message: "Please select a branch for this staff member." });
+    }
+
     const updated = await storage.updateReceptionist(req.params.id, payload);
     if (!updated) return res.status(404).json({ message: "Staff member not found" });
     await storage.logAction({
@@ -244,9 +288,70 @@ export function registerRoutes(app: Express) {
       email: updated.email,
       role: updated.role,
       avatarUrl: updated.avatarUrl,
+      branchId: updated.branchId,
       active: updated.active,
       createdAt: updated.createdAt,
     });
+  });
+
+  // ---------- Branches (admin only manages; any authenticated user can list for dropdowns) ----------
+  app.get("/api/branches", requireAuth, async (_req, res) => {
+    res.json(await storage.getBranches());
+  });
+
+  app.post("/api/branches", requireAdmin, async (req, res) => {
+    const parsed = insertBranchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const branch = await storage.createBranch(parsed.data);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "branch_created",
+      details: `Branch created: ${branch.name}`,
+    });
+    res.status(201).json(branch);
+  });
+
+  app.patch("/api/branches/:id", requireAdmin, async (req, res) => {
+    const parsed = updateBranchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    let branch: Awaited<ReturnType<typeof storage.updateBranch>>;
+    try {
+      branch = await storage.updateBranch(req.params.id, parsed.data);
+    } catch (err: any) {
+      if (err?.code === "23505") return res.status(409).json({ message: "A branch with that name already exists." });
+      throw err;
+    }
+    if (!branch) return res.status(404).json({ message: "Branch not found" });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "branch_updated",
+      details: `Branch updated: ${branch.name}`,
+    });
+    res.json(branch);
+  });
+
+  app.delete("/api/branches/:id", requireAdmin, async (req, res) => {
+    const branch = await storage.getBranchById(req.params.id);
+    if (!branch) return res.status(404).json({ message: "Branch not found" });
+    const [roomCount, staffCount] = await Promise.all([
+      storage.countRoomsInBranch(req.params.id),
+      storage.countReceptionistsInBranch(req.params.id),
+    ]);
+    if (roomCount > 0 || staffCount > 0) {
+      return res.status(409).json({
+        message: `Cannot delete "${branch.name}" — it still has ${roomCount} room(s) and ${staffCount} staff member(s) assigned. Reassign or remove them first.`,
+      });
+    }
+    await storage.deleteBranch(req.params.id);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "branch_deleted",
+      details: `Branch deleted: ${branch.name}`,
+    });
+    res.json({ ok: true });
   });
 
   // ---------- Shifts ----------
@@ -328,19 +433,26 @@ export function registerRoutes(app: Express) {
   });
 
   // ---------- Rooms ----------
-  app.get("/api/rooms", requireAuth, async (_req, res) => {
-    res.json(await storage.getRooms());
+  app.get("/api/rooms", requireAuth, async (req, res) => {
+    // Admins may optionally filter by a specific branch via ?branchId=; everyone
+    // else is hard-scoped server-side to their own branch regardless of query params.
+    const branchId = req.session.role === "admin"
+      ? (typeof req.query.branchId === "string" ? req.query.branchId : undefined)
+      : scopeBranchId(req);
+    res.json(await storage.getRooms(branchId));
   });
 
   app.post("/api/rooms", requireAdmin, async (req, res) => {
     const parsed = insertRoomSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
+    const branch = await storage.getBranchById(parsed.data.branchId);
+    if (!branch) return res.status(400).json({ message: "Selected branch does not exist." });
     const room = await storage.createRoom(parsed.data);
     await storage.logAction({
       receptionistId: req.session.receptionistId,
       receptionistName: req.session.receptionistName,
       action: "room_created",
-      details: `Room ${room.roomNumber} (${room.roomType})`,
+      details: `Room ${room.roomNumber} (${room.roomType}) in ${branch.name}`,
     });
     res.status(201).json(room);
   });
@@ -349,13 +461,23 @@ export function registerRoutes(app: Express) {
     const parsed = updateRoomSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message });
 
-    // Non-admins may only change room status (e.g. marking a room for maintenance).
-    // Editing name/type/price/capacity/amenities is restricted to admins.
+    const existingRoom = await storage.getRoomById(req.params.id);
+    if (!existingRoom) return res.status(404).json({ message: "Room not found" });
+
+    // Non-admins are confined to their own branch and may only change room
+    // status (e.g. marking a room for maintenance). Editing name/type/price/
+    // capacity/amenities/branch is restricted to admins.
     if (req.session.role !== "admin") {
+      if (existingRoom.branchId !== req.session.branchId) {
+        return res.status(403).json({ message: "This room belongs to a different branch." });
+      }
       const allowedKeys = Object.keys(parsed.data).every((k) => k === "status");
       if (!allowedKeys) {
         return res.status(403).json({ message: "Only an admin can edit room details" });
       }
+    } else if (parsed.data.branchId) {
+      const branch = await storage.getBranchById(parsed.data.branchId);
+      if (!branch) return res.status(400).json({ message: "Selected branch does not exist." });
     }
 
     let room: Awaited<ReturnType<typeof storage.updateRoom>>;
@@ -403,6 +525,12 @@ export function registerRoutes(app: Express) {
 
     const shift = await storage.getActiveShiftForReceptionist(req.session.receptionistId!);
     const status = source === "walk_in" ? "checked_in" : "pending";
+
+    // Non-admins can only book rooms within their own branch.
+    if (req.session.role !== "admin") {
+      const inBranch = await storage.roomBelongsToBranch(roomId, req.session.branchId || "");
+      if (!inBranch) return res.status(403).json({ message: "This room belongs to a different branch." });
+    }
 
     let result: { reservation: any; guest: any; room: any };
     try {
@@ -472,6 +600,14 @@ export function registerRoutes(app: Express) {
     const shift = await storage.getActiveShiftForReceptionist(req.session.receptionistId!);
     const status = source === "walk_in" ? "checked_in" : "pending";
 
+    // Non-admins can only book rooms within their own branch.
+    if (req.session.role !== "admin") {
+      const checks = await Promise.all(roomIds.map((id) => storage.roomBelongsToBranch(id, req.session.branchId || "")));
+      if (checks.some((ok) => !ok)) {
+        return res.status(403).json({ message: "One or more rooms belong to a different branch." });
+      }
+    }
+
     let result: { reservations: any[]; guest: any; rooms: any[] };
     try {
       result = await storage.createMultiRoomBookingTransactional({
@@ -523,8 +659,8 @@ export function registerRoutes(app: Express) {
     res.status(201).json(result);
   });
 
-  app.get("/api/reservations", requireAuth, async (_req, res) => {
-    const list = await storage.getReservations();
+  app.get("/api/reservations", requireAuth, async (req, res) => {
+    const list = await storage.getReservations(scopeBranchId(req));
     const enriched = await Promise.all(
       list.map(async (r) => ({
         ...r,
@@ -626,9 +762,10 @@ export function registerRoutes(app: Express) {
 
   // ---------- Dashboard ----------
   app.get("/api/dashboard/summary", requireAuth, async (req, res) => {
+    const branchId = scopeBranchId(req);
     const [reservationsList, roomsStatus, paymentsList, shift] = await Promise.all([
-      storage.getReservations(),
-      storage.countRoomsByStatus(),
+      storage.getReservations(branchId),
+      storage.countRoomsByStatus(branchId),
       storage.getPayments(),
       storage.getActiveShiftForReceptionist(req.session.receptionistId!),
     ]);
@@ -694,11 +831,12 @@ export function registerRoutes(app: Express) {
   });
 
   // ---------- Reports ----------
-  app.get("/api/reports/summary", requireAuth, async (_req, res) => {
+  app.get("/api/reports/summary", requireAuth, async (req, res) => {
+    const branchId = scopeBranchId(req);
     const [reservationsList, paymentsList, roomsList] = await Promise.all([
-      storage.getReservations(),
+      storage.getReservations(branchId),
       storage.getPayments(),
-      storage.getRooms(),
+      storage.getRooms(branchId),
     ]);
     const totalRevenue = paymentsList.filter((p) => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0);
     const occupied = roomsList.filter((r) => r.status === "occupied").length;

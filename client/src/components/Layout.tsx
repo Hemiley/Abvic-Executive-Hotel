@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { to: "/reports", label: "Reports", icon: "📊", roles: ["admin"] },
   { to: "/audit-log", label: "Audit Log", icon: "🔒", roles: ["admin", "supervisor"] },
   { to: "/staff", label: "Staff Management", icon: "🧑‍💼", roles: ["admin"] },
+  { to: "/branches", label: "Branches", icon: "🏢", roles: ["admin"] },
   { to: "/settings", label: "Hotel Settings", icon: "⚙️", roles: ["admin"] },
 ];
 

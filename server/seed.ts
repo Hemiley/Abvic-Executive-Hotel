@@ -7,6 +7,15 @@ export async function seedAdmin() {
   const ADMIN_PASSWORD = process.env.ADMIN_INITIAL_PASSWORD || nanoid(12);
   const RECEPTIONIST_PASSWORD = process.env.RECEPTIONIST_INITIAL_PASSWORD || nanoid(12);
 
+  // ── Default branch ────────────────────────────────────────────────────────
+  // Every receptionist and room needs a branch. Ensure at least one exists on
+  // first boot so the app is usable without a manual setup step.
+  let defaultBranch = (await storage.getBranches())[0];
+  if (!defaultBranch) {
+    defaultBranch = await storage.createBranch({ name: "Annex 1", code: "ANNEX-1", active: true });
+    console.log(`Default branch created: ${defaultBranch.name}`);
+  }
+
   // ── Admin account ──────────────────────────────────────────────────────────
   // If ADMIN_INITIAL_PASSWORD is set we always sync the admin's credentials so
   // the same env var works across every deployment (Replit, Railway, etc.).
@@ -60,6 +69,7 @@ export async function seedAdmin() {
       passwordHash,
       fullName: "Front Desk Receptionist",
       role: "receptionist",
+      branchId: defaultBranch.id,
     });
     if (process.env.NODE_ENV !== "production") {
       console.log("============================================");
@@ -83,7 +93,7 @@ export async function seedAdmin() {
       { roomNumber: "401", roomType: "Presidential Suite", pricePerNight: 450, capacity: 6, amenities: ["Wi-Fi", "TV", "AC", "Mini Bar", "Jacuzzi", "Butler Service"] },
     ];
     for (const room of sampleRooms) {
-      await storage.createRoom(room as any);
+      await storage.createRoom({ ...room, branchId: defaultBranch.id } as any);
     }
   }
 

@@ -12,6 +12,7 @@ import Rooms from "./pages/Rooms";
 import Reports from "./pages/Reports";
 import AuditLog from "./pages/AuditLog";
 import Staff from "./pages/Staff";
+import Branches from "./pages/Branches";
 import HotelSettings from "./pages/HotelSettings";
 import NotificationsPage from "./pages/Notifications";
 
@@ -82,6 +83,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <Staff />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/branches"
+        element={
+          <ProtectedRoute adminOnly>
+            <Branches />
           </ProtectedRoute>
         }
       />

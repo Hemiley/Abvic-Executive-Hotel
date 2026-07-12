@@ -1,5 +1,6 @@
 import { db, pool } from "./db";
 import {
+  branches,
   receptionists,
   shifts,
   rooms,
@@ -9,6 +10,9 @@ import {
   auditLogs,
   notifications,
   hotelSettings,
+  type Branch,
+  type InsertBranch,
+  type UpdateBranch,
   type Receptionist,
   type Shift,
   type Room,
@@ -29,6 +33,35 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 
 export const storage = {
+  // Branches
+  async getBranches(): Promise<Branch[]> {
+    return db.select().from(branches).orderBy(branches.name);
+  },
+  async getBranchById(id: string): Promise<Branch | undefined> {
+    const [b] = await db.select().from(branches).where(eq(branches.id, id));
+    return b;
+  },
+  async createBranch(data: InsertBranch): Promise<Branch> {
+    const [b] = await db.insert(branches).values(data).returning();
+    return b;
+  },
+  async updateBranch(id: string, data: UpdateBranch): Promise<Branch | undefined> {
+    const [b] = await db.update(branches).set(data).where(eq(branches.id, id)).returning();
+    return b;
+  },
+  async deleteBranch(id: string): Promise<boolean> {
+    const result = await db.delete(branches).where(eq(branches.id, id)).returning();
+    return result.length > 0;
+  },
+  async countRoomsInBranch(branchId: string): Promise<number> {
+    const rows = await db.select().from(rooms).where(eq(rooms.branchId, branchId));
+    return rows.length;
+  },
+  async countReceptionistsInBranch(branchId: string): Promise<number> {
+    const rows = await db.select().from(receptionists).where(eq(receptionists.branchId, branchId));
+    return rows.length;
+  },
+
   // Receptionists
   async getReceptionistByUsername(username: string): Promise<Receptionist | undefined> {
     const [r] = await db.select().from(receptionists).where(eq(receptionists.username, username));
@@ -49,11 +82,15 @@ export const storage = {
     email?: string;
     role?: string;
     avatarUrl?: string;
+    branchId?: string | null;
   }): Promise<Receptionist> {
     const [r] = await db.insert(receptionists).values(data).returning();
     return r;
   },
-  async getReceptionists(): Promise<Receptionist[]> {
+  async getReceptionists(branchId?: string): Promise<Receptionist[]> {
+    if (branchId) {
+      return db.select().from(receptionists).where(eq(receptionists.branchId, branchId)).orderBy(receptionists.fullName);
+    }
     return db.select().from(receptionists).orderBy(receptionists.fullName);
   },
   async updateReceptionist(
@@ -136,7 +173,10 @@ export const storage = {
   },
 
   // Rooms
-  async getRooms(): Promise<Room[]> {
+  async getRooms(branchId?: string): Promise<Room[]> {
+    if (branchId) {
+      return db.select().from(rooms).where(eq(rooms.branchId, branchId)).orderBy(rooms.roomNumber);
+    }
     return db.select().from(rooms).orderBy(rooms.roomNumber);
   },
   async getRoomById(id: string): Promise<Room | undefined> {
@@ -163,8 +203,10 @@ export const storage = {
   async setRoomStatus(id: string, status: string) {
     await db.update(rooms).set({ status }).where(eq(rooms.id, id));
   },
-  async countRoomsByStatus(): Promise<Record<string, number>> {
-    const all = await db.select().from(rooms);
+  async countRoomsByStatus(branchId?: string): Promise<Record<string, number>> {
+    const all = branchId
+      ? await db.select().from(rooms).where(eq(rooms.branchId, branchId))
+      : await db.select().from(rooms);
     return all.reduce((acc: Record<string, number>, r) => {
       acc[r.status] = (acc[r.status] || 0) + 1;
       return acc;
@@ -407,7 +449,16 @@ export const storage = {
     const [r] = await db.insert(reservations).values(data).returning();
     return r;
   },
-  async getReservations(): Promise<Reservation[]> {
+  async getReservations(branchId?: string): Promise<Reservation[]> {
+    if (branchId) {
+      const rows = await db
+        .select({ reservation: reservations })
+        .from(reservations)
+        .innerJoin(rooms, eq(rooms.id, reservations.roomId))
+        .where(and(eq(rooms.branchId, branchId)))
+        .orderBy(desc(reservations.createdAt));
+      return rows.map((r) => r.reservation);
+    }
     return db.select().from(reservations).orderBy(desc(reservations.createdAt));
   },
   async getReservationById(id: string): Promise<Reservation | undefined> {
@@ -471,6 +522,13 @@ export const storage = {
   },
   async markNotificationRead(id: string) {
     await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+  },
+
+  // Cross-branch access guard — used before creating/updating bookings so a
+  // receptionist can never touch a room outside their assigned branch.
+  async roomBelongsToBranch(roomId: string, branchId: string): Promise<boolean> {
+    const room = await this.getRoomById(roomId);
+    return !!room && room.branchId === branchId;
   },
 
   // Hotel settings

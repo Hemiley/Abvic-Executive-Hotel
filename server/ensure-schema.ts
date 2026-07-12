@@ -13,6 +13,14 @@ export async function ensureSchema(): Promise<void> {
     await client.query(`
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+      CREATE TABLE IF NOT EXISTS branches (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name       TEXT NOT NULL UNIQUE,
+        code       TEXT,
+        active     BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS receptionists (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username      TEXT NOT NULL UNIQUE,
@@ -21,10 +29,13 @@ export async function ensureSchema(): Promise<void> {
         email         TEXT,
         role          TEXT NOT NULL DEFAULT 'receptionist',
         avatar_url    TEXT,
+        branch_id     UUID,
         two_factor_enabled BOOLEAN NOT NULL DEFAULT false,
         active        BOOLEAN NOT NULL DEFAULT true,
         created_at    TIMESTAMP NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE receptionists ADD COLUMN IF NOT EXISTS branch_id UUID;
 
       CREATE TABLE IF NOT EXISTS shifts (
         id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,6 +60,7 @@ export async function ensureSchema(): Promise<void> {
 
       CREATE TABLE IF NOT EXISTS rooms (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        branch_id       UUID,
         room_number     TEXT NOT NULL UNIQUE,
         room_type       TEXT NOT NULL,
         price_per_night NUMERIC NOT NULL,
@@ -59,6 +71,8 @@ export async function ensureSchema(): Promise<void> {
         status          TEXT NOT NULL DEFAULT 'available',
         created_at      TIMESTAMP NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE rooms ADD COLUMN IF NOT EXISTS branch_id UUID;
 
       CREATE TABLE IF NOT EXISTS guests (
         id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -134,6 +148,28 @@ export async function ensureSchema(): Promise<void> {
         updated_at            TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+
+    // ---------- Branch backfill (idempotent) ----------
+    // Rooms must always have a branch. If any rooms predate the branches
+    // table, assign them (and any branch-less receptionists) to a default
+    // branch so the NOT NULL constraint below can be applied safely.
+    const { rows: branchCountRows } = await client.query(`SELECT COUNT(*)::int AS count FROM branches`);
+    if (branchCountRows[0].count === 0) {
+      await client.query(
+        `INSERT INTO branches (name, code) VALUES ('Annex 1', 'ANNEX-1') ON CONFLICT (name) DO NOTHING`
+      );
+    }
+    const { rows: defaultBranchRows } = await client.query(`SELECT id FROM branches ORDER BY created_at LIMIT 1`);
+    const defaultBranchId = defaultBranchRows[0]?.id;
+    if (defaultBranchId) {
+      await client.query(`UPDATE rooms SET branch_id = $1 WHERE branch_id IS NULL`, [defaultBranchId]);
+      await client.query(
+        `UPDATE receptionists SET branch_id = $1 WHERE branch_id IS NULL AND role <> 'admin'`,
+        [defaultBranchId]
+      );
+    }
+    await client.query(`ALTER TABLE rooms ALTER COLUMN branch_id SET NOT NULL`);
+
     console.log("Database schema ready.");
   } finally {
     client.release();

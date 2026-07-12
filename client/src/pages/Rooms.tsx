@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Room } from "../lib/api";
+import { api, type Room, type Branch } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { fileToResizedDataUrl } from "../lib/image";
 
@@ -98,6 +98,8 @@ export default function Rooms() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchFilter, setBranchFilter] = useState<string>("all");
   const [error, setError] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [viewing, setViewing] = useState<Room | null>(null);
@@ -106,6 +108,7 @@ export default function Rooms() {
   const [editError, setEditError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState({
+    branchId: "",
     roomNumber: "",
     roomType: "Standard Room",
     pricePerNight: "80",
@@ -114,6 +117,7 @@ export default function Rooms() {
     imageUrls: [] as string[],
   });
   const [editForm, setEditForm] = useState({
+    branchId: "",
     roomNumber: "",
     roomType: "",
     pricePerNight: "",
@@ -122,18 +126,34 @@ export default function Rooms() {
     imageUrls: [] as string[],
   });
 
+  const branchName = (id: string) => branches.find((b) => b.id === id)?.name || "—";
+
   function load() {
     api.getRooms().then(setRooms).catch((e) => setError(e.message));
+    if (isAdmin) {
+      api.getBranches().then((list) => {
+        setBranches(list);
+        setForm((f) => ({ ...f, branchId: f.branchId || list[0]?.id || "" }));
+      }).catch((e) => setError(e.message));
+    }
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const visibleRooms = branchFilter === "all" ? rooms : rooms.filter((r) => r.branchId === branchFilter);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (isAdmin && !form.branchId) {
+      setError("Please select a branch for this room.");
+      return;
+    }
     try {
       await api.createRoom({
+        branchId: form.branchId || undefined,
         roomNumber: form.roomNumber,
         roomType: form.roomType,
         pricePerNight: Number(form.pricePerNight) as any,
@@ -143,7 +163,7 @@ export default function Rooms() {
         imageUrl: form.imageUrls[0] || undefined,
       });
       setShowNew(false);
-      setForm({ roomNumber: "", roomType: "Standard Room", pricePerNight: "80", capacity: "2", amenities: "Wi-Fi, TV, AC", imageUrls: [] });
+      setForm({ branchId: form.branchId, roomNumber: "", roomType: "Standard Room", pricePerNight: "80", capacity: "2", amenities: "Wi-Fi, TV, AC", imageUrls: [] });
       load();
     } catch (e: any) {
       setError(e.message);
@@ -167,6 +187,7 @@ export default function Rooms() {
       ? room.imageUrls
       : room.imageUrl ? [room.imageUrl] : [];
     setEditForm({
+      branchId: room.branchId,
       roomNumber: room.roomNumber,
       roomType: room.roomType,
       pricePerNight: room.pricePerNight,
@@ -220,6 +241,7 @@ export default function Rooms() {
     setSaving(true);
     try {
       await api.updateRoom(editing.id, {
+        branchId: editForm.branchId || undefined,
         roomNumber: editForm.roomNumber,
         roomType: editForm.roomType,
         pricePerNight: Number(editForm.pricePerNight) as any,
@@ -251,10 +273,22 @@ export default function Rooms() {
         )}
       </div>
 
+      {isAdmin && branches.length > 1 && (
+        <div className="field" style={{ maxWidth: 260, marginBottom: 16 }}>
+          <label>Filter by Branch</label>
+          <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
+            <option value="all">All Branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {error && <p className="error-text">{error}</p>}
 
       <div className="room-grid">
-        {rooms.map((room) => {
+        {visibleRooms.map((room) => {
           const primaryImage = (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls[0] : room.imageUrl;
           const extraCount = (room.imageUrls?.length ?? 0) - 1;
           return (
@@ -285,6 +319,7 @@ export default function Rooms() {
                   <span className={`badge status-${room.status}`}>{room.status}</span>
                 </div>
                 <div className="room-number">Room {room.roomNumber}</div>
+                {isAdmin && <div className="muted" style={{ fontSize: 13, marginBottom: 2 }}>🏢 {branchName(room.branchId)}</div>}
                 <div className="room-price">₦{Number(room.pricePerNight).toFixed(2)} / night</div>
                 <div className="room-amenities">
                   {room.amenities.map((a) => (
@@ -363,6 +398,18 @@ export default function Rooms() {
               </div>
             </div>
 
+            <div className="field">
+              <label>Branch</label>
+              <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })} required>
+                <option value="" disabled>Select a branch…</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              {branches.length === 0 && (
+                <p className="field-hint">No branches yet — create one under Branches first.</p>
+              )}
+            </div>
             <div className="field-row">
               <div className="field">
                 <label>Room Number</label>
@@ -438,6 +485,14 @@ export default function Rooms() {
               )}
             </div>
 
+            <div className="field">
+              <label>Branch</label>
+              <select value={editForm.branchId} onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })} required>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="field-row">
               <div className="field">
                 <label>Room Number</label>

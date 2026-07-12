@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type Shift } from "../lib/api";
 
-type AuthUser = { id: string; username: string; fullName: string; role: string; avatarUrl?: string | null } | null;
+type AuthUser = { id: string; username: string; fullName: string; role: string; avatarUrl?: string | null; branchId?: string | null } | null;
 
-type LoginResult = { id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null };
+type LoginResult = { id: string; username: string; fullName: string; role: string; avatarUrl: string | null; branchId?: string | null; shift: Shift | null };
 
 type AuthContextValue = {
   user: AuthUser;

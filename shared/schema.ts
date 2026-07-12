@@ -1,6 +1,14 @@
 import { pgTable, text, timestamp, uuid, boolean, integer, numeric, jsonb } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
+export const branches = pgTable("branches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  code: text("code"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const receptionists = pgTable("receptionists", {
   id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
@@ -9,6 +17,9 @@ export const receptionists = pgTable("receptionists", {
   email: text("email"),
   role: text("role").notNull().default("receptionist"), // receptionist | supervisor | admin
   avatarUrl: text("avatar_url"),
+  // Which branch this staff member operates out of. Admins are branch-agnostic (null) —
+  // everyone else is scoped to exactly one branch and only sees that branch's data.
+  branchId: uuid("branch_id"),
   twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -37,6 +48,10 @@ export const shifts = pgTable("shifts", {
 
 export const rooms = pgTable("rooms", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Every room belongs to exactly one branch. New branches can be added at
+  // any time without touching this table's structure — just insert a row
+  // into `branches` and start assigning rooms to it.
+  branchId: uuid("branch_id").notNull(),
   roomNumber: text("room_number").notNull().unique(),
   roomType: text("room_type").notNull(),
   pricePerNight: numeric("price_per_night").notNull(),
@@ -135,7 +150,16 @@ export const closeShiftSchema = z.object({
   closingBalance: z.number().min(0),
 });
 
+export const insertBranchSchema = z.object({
+  name: z.string().min(1),
+  code: z.string().optional(),
+  active: z.boolean().default(true),
+});
+
+export const updateBranchSchema = insertBranchSchema.partial();
+
 export const insertRoomSchema = z.object({
+  branchId: z.string().uuid(),
   roomNumber: z.string().min(1),
   roomType: z.string().min(1),
   pricePerNight: z.number().min(0),
@@ -210,6 +234,9 @@ export const createReceptionistSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   role: z.enum(["receptionist", "supervisor", "admin"]).default("receptionist"),
   avatarUrl: z.string().optional(),
+  // Required for receptionist/supervisor; admins are branch-agnostic. Enforced in the route handler
+  // since the requirement depends on the chosen role, not on the field alone.
+  branchId: z.string().uuid().optional(),
 });
 
 export const updateHotelSettingsSchema = z.object({
@@ -230,8 +257,12 @@ export const updateReceptionistSchema = z.object({
   avatarUrl: z.string().optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
+  branchId: z.string().uuid().nullable().optional(),
 });
 
+export type Branch = typeof branches.$inferSelect;
+export type InsertBranch = z.infer<typeof insertBranchSchema>;
+export type UpdateBranch = z.infer<typeof updateBranchSchema>;
 export type Receptionist = typeof receptionists.$inferSelect;
 export type Shift = typeof shifts.$inferSelect;
 export type Room = typeof rooms.$inferSelect;

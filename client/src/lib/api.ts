@@ -19,8 +19,17 @@ export type Shift = {
   refundsIssued: string;
 };
 
+export type Branch = {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
 export type Room = {
   id: string;
+  branchId: string;
   roomNumber: string;
   roomType: string;
   pricePerNight: string;
@@ -96,6 +105,7 @@ export type Staff = {
   email: string | null;
   role: "receptionist" | "supervisor" | "admin";
   avatarUrl: string | null;
+  branchId: string | null;
   active: boolean;
   createdAt: string;
 };
@@ -187,12 +197,19 @@ export const api = {
       settings: HotelSettings;
     }>(`/api/shifts/${id}/report`),
 
-  getRooms: () => request<Room[]>("/api/rooms"),
+  getRooms: (branchId?: string) => request<Room[]>(`/api/rooms${branchId ? `?branchId=${branchId}` : ""}`),
   createRoom: (data: Partial<Room>) => request<Room>("/api/rooms", { method: "POST", body: JSON.stringify(data) }),
   updateRoom: (id: string, data: Partial<Room>) =>
     request<Room>(`/api/rooms/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteRoom: (id: string) =>
     request<{ ok: boolean }>(`/api/rooms/${id}`, { method: "DELETE" }),
+
+  getBranches: () => request<Branch[]>("/api/branches"),
+  createBranch: (data: { name: string; code?: string; active?: boolean }) =>
+    request<Branch>("/api/branches", { method: "POST", body: JSON.stringify(data) }),
+  updateBranch: (id: string, data: Partial<{ name: string; code: string; active: boolean }>) =>
+    request<Branch>(`/api/branches/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteBranch: (id: string) => request<{ ok: boolean }>(`/api/branches/${id}`, { method: "DELETE" }),
 
   createBooking: (data: any) => request<any>("/api/bookings", { method: "POST", body: JSON.stringify(data) }),
   createMultiRoomBooking: (data: any) =>
@@ -207,7 +224,7 @@ export const api = {
   createPayment: (data: any) => request<Payment>("/api/payments", { method: "POST", body: JSON.stringify(data) }),
   getPayments: () => request<Payment[]>("/api/payments"),
 
-  getStaff: () => request<Staff[]>("/api/staff"),
+  getStaff: (branchId?: string) => request<Staff[]>(`/api/staff${branchId ? `?branchId=${branchId}` : ""}`),
   createStaff: (data: {
     username: string;
     password: string;
@@ -215,10 +232,11 @@ export const api = {
     email?: string;
     role: string;
     avatarUrl?: string;
+    branchId?: string;
   }) => request<Staff>("/api/staff", { method: "POST", body: JSON.stringify(data) }),
   updateStaff: (
     id: string,
-    data: Partial<{ fullName: string; email: string; role: string; avatarUrl: string; active: boolean; password: string }>
+    data: Partial<{ fullName: string; email: string; role: string; avatarUrl: string; active: boolean; password: string; branchId: string | null }>
   ) => request<Staff>(`/api/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteStaff: (id: string) => request<void>(`/api/staff/${id}`, { method: "DELETE" }),
 
