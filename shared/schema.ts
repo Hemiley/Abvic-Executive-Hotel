@@ -140,6 +140,7 @@ export const hotelSettings = pgTable("hotel_settings", {
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+  branchId: z.string().min(1).optional(),
 });
 
 export const startShiftSchema = z.object({

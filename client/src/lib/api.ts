@@ -172,11 +172,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  login: (username: string, password: string) =>
-    request<{ id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null }>(
+  login: (username: string, password: string, branchId?: string) =>
+    request<{ id: string; username: string; fullName: string; role: string; avatarUrl: string | null; branchId?: string | null; shift: Shift | null }>(
       "/api/auth/login",
-      { method: "POST", body: JSON.stringify({ username, password }) }
+      { method: "POST", body: JSON.stringify({ username, password, branchId }) }
     ),
+  getPublicBranches: () => request<{ id: string; name: string }[]>("/api/branches/public"),
   logout: () => request("/api/auth/logout", { method: "POST" }),
   me: () =>
     request<{ id: string; username: string; fullName: string; role: string; avatarUrl: string | null; shift: Shift | null }>(

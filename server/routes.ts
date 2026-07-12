@@ -75,11 +75,19 @@ export function registerRoutes(app: Express) {
   app.post("/api/auth/login", async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid username or password" });
-    const { username, password } = parsed.data;
+    const { username, password, branchId } = parsed.data;
     const receptionist = await storage.getReceptionistByUsername(username);
     if (!receptionist || !receptionist.active) return res.status(401).json({ message: "Invalid credentials" });
     const valid = await bcrypt.compare(password, receptionist.passwordHash);
     if (!valid) return res.status(401).json({ message: "Invalid credentials" });
+
+    // Non-admin staff must confirm the branch they're signing in to; it must match their assignment.
+    if (receptionist.role !== "admin") {
+      if (!branchId) return res.status(400).json({ message: "Please select your branch." });
+      if (branchId !== receptionist.branchId) {
+        return res.status(401).json({ message: "This account is not assigned to the selected branch." });
+      }
+    }
 
     req.session.receptionistId = receptionist.id;
     req.session.receptionistName = receptionist.fullName;
@@ -295,6 +303,16 @@ export function registerRoutes(app: Express) {
   });
 
   // ---------- Branches (admin only manages; any authenticated user can list for dropdowns) ----------
+  // Public, minimal listing (id/name only, active branches) for the pre-login branch picker.
+  app.get("/api/branches/public", async (_req, res) => {
+    const branches = await storage.getBranches();
+    res.json(
+      branches
+        .filter((b) => b.active)
+        .map((b) => ({ id: b.id, name: b.name }))
+    );
+  });
+
   app.get("/api/branches", requireAuth, async (_req, res) => {
     res.json(await storage.getBranches());
   });

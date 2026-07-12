@@ -9,7 +9,7 @@ type AuthContextValue = {
   user: AuthUser;
   shift: Shift | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<LoginResult>;
+  login: (username: string, password: string, branchId?: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refreshShift: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(username: string, password: string) {
-    const result = await api.login(username, password);
+  async function login(username: string, password: string, branchId?: string) {
+    const result = await api.login(username, password, branchId);
     setUser(result);
     setShift(result.shift);
     return result;
