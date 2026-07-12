@@ -849,11 +849,31 @@ export function registerRoutes(app: Express) {
   });
 
   // ---------- Reports ----------
+  function parseReportDateRange(req: Request): { from?: Date; to?: Date; error?: string } {
+    const { from, to } = req.query as { from?: string; to?: string };
+    let dateFrom: Date | undefined;
+    let dateTo: Date | undefined;
+    if (from) {
+      dateFrom = new Date(from);
+      if (isNaN(dateFrom.getTime())) return { error: "Invalid 'from' date." };
+    }
+    if (to) {
+      dateTo = new Date(to);
+      if (isNaN(dateTo.getTime())) return { error: "Invalid 'to' date." };
+      // Treat the "to" date as inclusive of the whole day.
+      dateTo.setHours(23, 59, 59, 999);
+    }
+    if (dateFrom && dateTo && dateFrom > dateTo) return { error: "'from' date must be before 'to' date." };
+    return { from: dateFrom, to: dateTo };
+  }
+
   app.get("/api/reports/summary", requireAuth, async (req, res) => {
     const branchId = scopeBranchId(req);
+    const range = parseReportDateRange(req);
+    if (range.error) return res.status(400).json({ message: range.error });
     const [reservationsList, paymentsList, roomsList] = await Promise.all([
-      storage.getReservations(branchId),
-      storage.getPayments(),
+      storage.getReservations(branchId, range.from, range.to),
+      storage.getPayments(branchId, range.from, range.to),
       storage.getRooms(branchId),
     ]);
     const totalRevenue = paymentsList.filter((p) => p.type === "payment").reduce((s, p) => s + Number(p.amount), 0);
@@ -886,8 +906,11 @@ export function registerRoutes(app: Express) {
     res.json(updated);
   });
 
-  app.get("/api/reports/export.csv", requireAuth, async (_req, res) => {
-    const paymentsList = await storage.getPayments();
+  app.get("/api/reports/export.csv", requireAuth, async (req, res) => {
+    const branchId = scopeBranchId(req);
+    const range = parseReportDateRange(req);
+    if (range.error) return res.status(400).json({ message: range.error });
+    const paymentsList = await storage.getPayments(branchId, range.from, range.to);
     const header = "Date,Receptionist,Method,Type,Amount,TransactionId\n";
     const rows = paymentsList
       .map(
@@ -895,8 +918,12 @@ export function registerRoutes(app: Express) {
           `${p.createdAt.toISOString()},${p.receptionistName},${p.method},${p.type},${p.amount},${p.transactionId || ""}`
       )
       .join("\n");
+    const suffix =
+      range.from || range.to
+        ? `_${(req.query.from as string) || "start"}_to_${(req.query.to as string) || "now"}`
+        : "";
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=report.csv");
+    res.setHeader("Content-Disposition", `attachment; filename=report${suffix}.csv`);
     res.send(header + rows);
   });
 

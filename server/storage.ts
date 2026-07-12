@@ -28,7 +28,7 @@ import {
   type UpdateReceptionist,
   type UpdateHotelSettings,
 } from "@shared/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 
@@ -449,15 +449,26 @@ export const storage = {
     const [r] = await db.insert(reservations).values(data).returning();
     return r;
   },
-  async getReservations(branchId?: string): Promise<Reservation[]> {
+  async getReservations(branchId?: string, dateFrom?: Date, dateTo?: Date): Promise<Reservation[]> {
+    const dateConditions = [];
+    if (dateFrom) dateConditions.push(gte(reservations.createdAt, dateFrom));
+    if (dateTo) dateConditions.push(lte(reservations.createdAt, dateTo));
+
     if (branchId) {
       const rows = await db
         .select({ reservation: reservations })
         .from(reservations)
         .innerJoin(rooms, eq(rooms.id, reservations.roomId))
-        .where(and(eq(rooms.branchId, branchId)))
+        .where(and(eq(rooms.branchId, branchId), ...dateConditions))
         .orderBy(desc(reservations.createdAt));
       return rows.map((r) => r.reservation);
+    }
+    if (dateConditions.length) {
+      return db
+        .select()
+        .from(reservations)
+        .where(and(...dateConditions))
+        .orderBy(desc(reservations.createdAt));
     }
     return db.select().from(reservations).orderBy(desc(reservations.createdAt));
   },
@@ -491,7 +502,28 @@ export const storage = {
       .returning();
     return p;
   },
-  async getPayments(): Promise<Payment[]> {
+  async getPayments(branchId?: string, dateFrom?: Date, dateTo?: Date): Promise<Payment[]> {
+    const dateConditions = [];
+    if (dateFrom) dateConditions.push(gte(payments.createdAt, dateFrom));
+    if (dateTo) dateConditions.push(lte(payments.createdAt, dateTo));
+
+    if (branchId) {
+      const rows = await db
+        .select({ payment: payments })
+        .from(payments)
+        .innerJoin(reservations, eq(reservations.id, payments.reservationId))
+        .innerJoin(rooms, eq(rooms.id, reservations.roomId))
+        .where(and(eq(rooms.branchId, branchId), ...dateConditions))
+        .orderBy(desc(payments.createdAt));
+      return rows.map((r) => r.payment);
+    }
+    if (dateConditions.length) {
+      return db
+        .select()
+        .from(payments)
+        .where(and(...dateConditions))
+        .orderBy(desc(payments.createdAt));
+    }
     return db.select().from(payments).orderBy(desc(payments.createdAt));
   },
   async getPaymentsByReservation(reservationId: string): Promise<Payment[]> {

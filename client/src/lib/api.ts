@@ -251,13 +251,18 @@ export const api = {
   createNotification: (data: { type?: string; message: string }) =>
     request<Notification>("/api/notifications", { method: "POST", body: JSON.stringify(data) }),
   getAuditLogs: () => request<AuditLog[]>("/api/audit-logs"),
-  getReportsSummary: () =>
-    request<{
+  getReportsSummary: (range?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (range?.from) params.set("from", range.from);
+    if (range?.to) params.set("to", range.to);
+    const qs = params.toString();
+    return request<{
       totalBookings: number;
       totalReservations: number;
       checkIns: number;
       checkOuts: number;
       occupancyRate: number;
       totalRevenue: number;
-    }>("/api/reports/summary"),
+    }>(`/api/reports/summary${qs ? `?${qs}` : ""}`);
+  },
 };
