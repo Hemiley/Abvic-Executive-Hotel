@@ -98,8 +98,8 @@ export default function AdminLogin() {
             <img src={settings.logoUrl} alt="Hotel logo" className="login-brand-logo" />
           ) : (
             "✨"
-          )}{" "}
-          {settings?.hotelName || "AEH"}
+          )}
+          <span>{settings?.hotelName || "AEH"}</span>
         </div>
 
         <div className="admin-badge">

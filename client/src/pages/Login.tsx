@@ -56,8 +56,8 @@ export default function Login() {
             <img src={settings.logoUrl} alt="Hotel logo" className="login-brand-logo" />
           ) : (
             "✨"
-          )}{" "}
-          {settings?.hotelName || "AEH"}
+          )}
+          <span>{settings?.hotelName || "AEH"}</span>
         </div>
         <h1>Receptionist Login</h1>
         <p className="login-sub">Sign in to access the front desk console</p>
