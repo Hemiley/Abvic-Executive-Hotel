@@ -8,6 +8,14 @@ const BAR_NAV = [
   { to: "/bar", label: "Dashboard", icon: "🍺", end: true },
   { to: "/bar/sales", label: "New Sale (POS)", icon: "🧾" },
   { to: "/bar/inventory", label: "Inventory", icon: "📦" },
+  { to: "/bar/reports", label: "Reports", icon: "📊" },
+  { to: "/bar/shifts", label: "Shift History", icon: "🕐" },
+];
+
+const SUPERVISOR_BAR_NAV = [
+  { to: "/bar", label: "Dashboard", icon: "🍺", end: true },
+  { to: "/bar/sales", label: "New Sale (POS)", icon: "🧾" },
+  { to: "/bar/inventory", label: "Inventory", icon: "📦" },
   { to: "/bar/waiters", label: "Waiters", icon: "👤" },
   { to: "/bar/reports", label: "Reports", icon: "📊" },
   { to: "/bar/shifts", label: "Shift History", icon: "🕐" },
@@ -49,7 +57,11 @@ export default function BarLayout({ children }: { children: ReactNode }) {
     navigate("/login");
   }
 
-  const navItems = user?.role === "admin" ? ADMIN_BAR_NAV : BAR_NAV;
+  const navItems = user?.role === "admin"
+    ? ADMIN_BAR_NAV
+    : user?.role === "supervisor"
+    ? SUPERVISOR_BAR_NAV
+    : BAR_NAV;
 
   return (
     <div className="app-shell">

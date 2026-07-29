@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 export default function BarWaiters() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canManage = user?.role === "admin" || user?.role === "supervisor";
   const [waiters, setWaiters] = useState<BarWaiter[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [showNew, setShowNew] = useState(false);
@@ -51,7 +52,7 @@ export default function BarWaiters() {
           <h1>Waiters / Waitresses</h1>
           <p className="page-sub">Manage bar service staff for sales tracking</p>
         </div>
-        <button className="btn" onClick={() => setShowNew(true)}>+ Add Waiter</button>
+        {canManage && <button className="btn" onClick={() => setShowNew(true)}>+ Add Waiter</button>}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -83,7 +84,7 @@ export default function BarWaiters() {
                 </td>
                 <td style={{ padding: "10px 14px", color: "var(--muted)", fontSize: "0.8rem" }}>{new Date(w.createdAt).toLocaleDateString()}</td>
                 <td style={{ padding: "10px 14px" }}>
-                  {w.active && (
+                  {w.active && canManage && (
                     <button className="btn danger" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={() => setDeleteTarget(w)}>
                       Remove
                     </button>
