@@ -147,6 +147,77 @@ export async function ensureSchema(): Promise<void> {
         short_rest_hourly_rate NUMERIC NOT NULL DEFAULT 3000,
         updated_at            TIMESTAMP NOT NULL DEFAULT NOW()
       );
+
+      -- ── Bar Management ──────────────────────────────────────────────────────
+
+      CREATE TABLE IF NOT EXISTS bar_drinks (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        branch_id           UUID NOT NULL,
+        name                TEXT NOT NULL,
+        category            TEXT NOT NULL DEFAULT 'Beer',
+        brand               TEXT,
+        selling_price       NUMERIC NOT NULL,
+        quantity_available  INTEGER NOT NULL DEFAULT 0,
+        low_stock_threshold INTEGER NOT NULL DEFAULT 5,
+        barcode             TEXT,
+        image_url           TEXT,
+        status              TEXT NOT NULL DEFAULT 'available',
+        created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS bar_waiters (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        branch_id  UUID NOT NULL,
+        name       TEXT NOT NULL,
+        active     BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS bar_shifts (
+        id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bar_attendant_id        UUID NOT NULL,
+        bar_attendant_name      TEXT NOT NULL,
+        branch_id               UUID NOT NULL,
+        status                  TEXT NOT NULL DEFAULT 'active',
+        open_time               TIMESTAMP NOT NULL DEFAULT NOW(),
+        close_time              TIMESTAMP,
+        opening_stock_snapshot  JSONB NOT NULL DEFAULT '[]',
+        closing_stock_snapshot  JSONB NOT NULL DEFAULT '[]',
+        total_revenue           NUMERIC NOT NULL DEFAULT '0',
+        total_bottles_sold      INTEGER NOT NULL DEFAULT 0,
+        total_transactions      INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS bar_sales (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bar_shift_id        UUID,
+        bar_attendant_id    UUID NOT NULL,
+        bar_attendant_name  TEXT NOT NULL,
+        branch_id           UUID NOT NULL,
+        invoice_number      TEXT NOT NULL UNIQUE,
+        waiter_name         TEXT,
+        payment_method      TEXT NOT NULL DEFAULT 'cash',
+        total_amount        NUMERIC NOT NULL,
+        created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS bar_sale_items (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bar_sale_id UUID NOT NULL,
+        drink_id    UUID NOT NULL,
+        drink_name  TEXT NOT NULL,
+        category    TEXT NOT NULL,
+        quantity    INTEGER NOT NULL,
+        unit_price  NUMERIC NOT NULL,
+        subtotal    NUMERIC NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS session (
+        sid    VARCHAR NOT NULL PRIMARY KEY,
+        sess   JSON NOT NULL,
+        expire TIMESTAMP(6) NOT NULL
+      );
     `);
 
     // ---------- Branch backfill (idempotent) ----------
