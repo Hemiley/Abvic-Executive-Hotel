@@ -165,6 +165,46 @@ export default function BarReports() {
     a.click();
   }
 
+  function downloadWaiterDetail(waiterName: string) {
+    if (!report) return;
+    const waiterSales = report.sales.filter(s => (s.waiterName || "—") === waiterName);
+    const fmt2 = (n: number | string) => Number(n).toFixed(2);
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Summary
+    const summary = report.salesByWaiter.find(w => w.name === waiterName);
+    const summaryData = [
+      ["Waiter/Waitress", waiterName],
+      ["Period", `${range.from} to ${range.to}`],
+      ["Total Transactions", summary?.sales ?? waiterSales.length],
+      ["Total Revenue (₦)", summary ? Number(summary.revenue) : waiterSales.reduce((s, x) => s + Number(x.totalAmount), 0)],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), "Summary");
+
+    // Sheet 2: Transaction detail (one row per sale item)
+    const detailHeaders = ["Invoice", "Date/Time", "Drink", "Category", "Qty", "Unit Price (₦)", "Subtotal (₦)", "Payment Method", "Attendant"];
+    const detailRows: (string | number)[][] = [];
+    for (const sale of waiterSales) {
+      for (const item of sale.items) {
+        detailRows.push([
+          sale.invoiceNumber,
+          new Date(sale.createdAt).toLocaleString("en-NG"),
+          item.drinkName,
+          item.category,
+          item.quantity,
+          Number(fmt2(item.unitPrice)),
+          Number(fmt2(item.subtotal)),
+          sale.paymentMethod,
+          sale.barAttendantName,
+        ]);
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]), "Transactions");
+
+    XLSX.writeFile(wb, `${waiterName.replace(/\s+/g, "-")}-sales-${range.from}-to-${range.to}.xlsx`);
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -253,7 +293,15 @@ export default function BarReports() {
                   <tbody>
                     {report.salesByWaiter.map(w => (
                       <tr key={w.name} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                        <td style={{ padding: "10px 14px", fontWeight: 600 }}>{w.name}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 600 }}>
+                          <button
+                            onClick={() => downloadWaiterDetail(w.name)}
+                            title={`Download ${w.name}'s transaction detail`}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 600, fontSize: "inherit", padding: 0, textDecoration: "underline dotted", textUnderlineOffset: "3px" }}
+                          >
+                            {w.name} ⬇
+                          </button>
+                        </td>
                         <td style={{ padding: "10px 14px" }}>{w.sales}</td>
                         <td style={{ padding: "10px 14px", fontWeight: 600 }}>{fmt(w.revenue)}</td>
                       </tr>
