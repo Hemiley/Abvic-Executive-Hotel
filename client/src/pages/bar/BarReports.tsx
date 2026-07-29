@@ -167,7 +167,8 @@ export default function BarReports() {
 
   function downloadWaiterDetail(waiterName: string) {
     if (!report) return;
-    const waiterSales = report.sales.filter(s => (s.waiterName || "—") === waiterName);
+    // Server groups null/empty waiter names as "Direct" — mirror that here
+    const waiterSales = report.sales.filter(s => (s.waiterName || "Direct") === waiterName);
     const fmt2 = (n: number | string) => Number(n).toFixed(2);
 
     const wb = XLSX.utils.book_new();
@@ -294,13 +295,16 @@ export default function BarReports() {
                     {report.salesByWaiter.map(w => (
                       <tr key={w.name} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                         <td style={{ padding: "10px 14px", fontWeight: 600 }}>
-                          <button
-                            onClick={() => downloadWaiterDetail(w.name)}
-                            title={`Download ${w.name}'s transaction detail`}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontWeight: 600, fontSize: "inherit", padding: 0, textDecoration: "underline dotted", textUnderlineOffset: "3px" }}
-                          >
-                            {w.name} ⬇
-                          </button>
+                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {w.name}
+                            <button
+                              onClick={() => downloadWaiterDetail(w.name)}
+                              title={`Download ${w.name}'s sales as Excel`}
+                              style={{ background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.5)", borderRadius: 6, cursor: "pointer", color: "#a5b4fc", fontSize: "0.72rem", padding: "2px 8px", fontWeight: 700, lineHeight: 1.6, whiteSpace: "nowrap", flexShrink: 0 }}
+                            >
+                              ⬇ Excel
+                            </button>
+                          </span>
                         </td>
                         <td style={{ padding: "10px 14px" }}>{w.sales}</td>
                         <td style={{ padding: "10px 14px", fontWeight: 600 }}>{fmt(w.revenue)}</td>
