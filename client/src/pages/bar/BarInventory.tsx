@@ -37,6 +37,7 @@ export default function BarInventory() {
   function load() {
     api.getBarDrinks().then(setDrinks).catch(e => setError(e.message));
     if (isAdmin) api.getBranches().then(setBranches).catch(() => {});
+    else setForm(f => ({ ...f, branchId: user?.branchId || "" }));
   }
 
   useEffect(() => { load(); }, []);

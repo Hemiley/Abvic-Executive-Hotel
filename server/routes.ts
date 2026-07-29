@@ -42,7 +42,16 @@ function requireBarAccess(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
   storage.getReceptionistById(req.session.receptionistId).then((user) => {
     if (!user || !user.active) { req.session.destroy(() => {}); return res.status(401).json({ message: "Session invalid" }); }
-    if (user.role !== "bar_attendant" && user.role !== "admin") return res.status(403).json({ message: "Bar access required" });
+    if (user.role !== "bar_attendant" && user.role !== "admin" && user.role !== "supervisor") return res.status(403).json({ message: "Bar access required" });
+    next();
+  }).catch(next);
+}
+
+function requireBarManager(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
+  storage.getReceptionistById(req.session.receptionistId).then((user) => {
+    if (!user || !user.active) { req.session.destroy(() => {}); return res.status(401).json({ message: "Session invalid" }); }
+    if (user.role !== "admin" && user.role !== "supervisor") return res.status(403).json({ message: "Admin or supervisor access required" });
     next();
   }).catch(next);
 }
@@ -951,15 +960,18 @@ export function registerRoutes(app: Express) {
     res.json(await storage.getBarDrinks(branchId));
   });
 
-  app.post("/api/bar/drinks", requireAdmin, async (req, res) => {
-    const parsed = insertBarDrinkSchema.safeParse(req.body);
+  app.post("/api/bar/drinks", requireBarManager, async (req, res) => {
+    const body = { ...req.body };
+    // Supervisors are scoped to their own branch
+    if (req.session.role !== "admin") body.branchId = req.session.branchId;
+    const parsed = insertBarDrinkSchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
     const drink = await storage.createBarDrink(parsed.data);
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_created", details: `${drink.name} added to bar inventory` });
     res.status(201).json(drink);
   });
 
-  app.patch("/api/bar/drinks/:id", requireAdmin, async (req, res) => {
+  app.patch("/api/bar/drinks/:id", requireBarManager, async (req, res) => {
     const parsed = updateBarDrinkSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
     const updated = await storage.updateBarDrink(req.params.id, parsed.data);
@@ -968,7 +980,7 @@ export function registerRoutes(app: Express) {
     res.json(updated);
   });
 
-  app.delete("/api/bar/drinks/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/bar/drinks/:id", requireBarManager, async (req, res) => {
     const deleted = await storage.deleteBarDrink(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Drink not found" });
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_deleted", details: `Drink ID ${req.params.id} removed` });
@@ -995,7 +1007,7 @@ export function registerRoutes(app: Express) {
     res.json(updated);
   });
 
-  app.delete("/api/bar/waiters/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/bar/waiters/:id", requireBarManager, async (req, res) => {
     await storage.updateBarWaiter(req.params.id, { active: false });
     res.json({ ok: true });
   });
