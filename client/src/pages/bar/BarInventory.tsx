@@ -20,6 +20,7 @@ const emptyForm = {
 export default function BarInventory() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canManage = user?.role === "admin" || user?.role === "supervisor";
   const [drinks, setDrinks] = useState<BarDrink[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [search, setSearch] = useState("");
@@ -119,7 +120,7 @@ export default function BarInventory() {
           <h1>Bar Inventory</h1>
           <p className="page-sub">Manage drink stock and pricing</p>
         </div>
-        {isAdmin && <button className="btn" onClick={() => setShowNew(true)}>+ Add Drink</button>}
+        {canManage && <button className="btn" onClick={() => setShowNew(true)}>+ Add Drink</button>}
       </div>
 
       {/* Filters */}
@@ -143,7 +144,7 @@ export default function BarInventory() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
           <thead>
             <tr>
-              {["Name", "Category", "Brand", "Price", "Stock", "Low Stock At", "Status", isAdmin ? "Actions" : ""].filter(Boolean).map(h => (
+              {["Name", "Category", "Brand", "Price", "Stock", "Low Stock At", "Status", canManage ? "Actions" : ""].filter(Boolean).map(h => (
                 <th key={h} style={{ padding: "10px 14px", textAlign: "left", background: "rgba(255,255,255,0.05)", color: "var(--muted)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
@@ -171,7 +172,7 @@ export default function BarInventory() {
                     color: d.status === "available" ? "#4ade80" : "#f87171",
                   }}>{d.status === "available" ? "Available" : "Out of Stock"}</span>
                 </td>
-                {isAdmin && (
+                {canManage && (
                   <td style={{ padding: "10px 14px" }}>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className="btn secondary" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={() => openEdit(d)}>Edit</button>

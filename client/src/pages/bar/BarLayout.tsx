@@ -96,7 +96,7 @@ export default function BarLayout({ children }: { children: ReactNode }) {
       <div className="main-col">
         <header className="topbar glass">
           <div className="topbar-title">
-            {user?.role === "admin" ? "Admin — Bar Portal" : "Bar Attendant Console"}
+            {user?.role === "admin" ? "Admin — Bar Portal" : user?.role === "supervisor" ? "Supervisor Console" : "Bar Attendant Console"}
           </div>
           <div className="topbar-actions">
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>

@@ -37,7 +37,7 @@ function BarProtectedRoute({ children, adminBar = false }: { children: JSX.Eleme
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "bar_attendant" && user.role !== "admin") return <Navigate to="/abvichoteldashboard" replace />;
+  if (user.role !== "bar_attendant" && user.role !== "admin" && user.role !== "supervisor") return <Navigate to="/abvichoteldashboard" replace />;
   if (adminBar && user.role !== "admin") return <Navigate to="/bar" replace />;
   return <BarLayout>{children}</BarLayout>;
 }
