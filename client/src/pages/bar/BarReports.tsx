@@ -144,6 +144,27 @@ export default function BarReports() {
     a.click();
   }
 
+  function handleWaiterExportExcel() {
+    if (!report) return;
+    const wb = XLSX.utils.book_new();
+    const headers = ["Waiter/Waitress", "Transactions", "Revenue (₦)"];
+    const rows = report.salesByWaiter.map(w => [w.name, w.sales, Number(w.revenue)]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, "Waiter Sales");
+    XLSX.writeFile(wb, `waiter-sales-${range.from}-to-${range.to}.xlsx`);
+  }
+
+  function handleWaiterExportCSV() {
+    if (!report) return;
+    const header = "Waiter/Waitress,Transactions,Revenue (₦)\n";
+    const rows = report.salesByWaiter.map(w => `${w.name},${w.sales},${w.revenue}`).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `waiter-sales-${range.from}-to-${range.to}.csv`;
+    a.click();
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -219,7 +240,13 @@ export default function BarReports() {
           {/* Sales by Waiter */}
           {report.salesByWaiter.length > 0 && (
             <div style={{ marginBottom: 24 }}>
-              <h2 style={{ marginBottom: 12 }}>Sales by Waiter/Waitress</h2>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <h2>Sales by Waiter/Waitress</h2>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn secondary" style={{ fontSize: "0.8rem", padding: "5px 12px" }} onClick={handleWaiterExportExcel}>📊 Excel</button>
+                  <button className="btn secondary" style={{ fontSize: "0.8rem", padding: "5px 12px" }} onClick={handleWaiterExportCSV}>📄 CSV</button>
+                </div>
+              </div>
               <div className="glass" style={{ borderRadius: 12, overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
                   <thead><tr>{["Waiter", "Transactions", "Revenue"].map(h => <th key={h} style={{ padding: "10px 14px", background: "rgba(255,255,255,0.05)", color: "var(--muted)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", textAlign: "left" }}>{h}</th>)}</tr></thead>
