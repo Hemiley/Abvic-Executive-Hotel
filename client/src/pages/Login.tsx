@@ -39,6 +39,10 @@ export default function Login() {
         setAdminRedirect(true);
         return;
       }
+      if (result?.role === "bar_attendant") {
+        navigate("/bar");
+        return;
+      }
       navigate("/abvichoteldashboard");
     } catch (err: any) {
       setError(err.message || "Login failed");

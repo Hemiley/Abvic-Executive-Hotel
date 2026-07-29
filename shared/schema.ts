@@ -137,6 +137,109 @@ export const hotelSettings = pgTable("hotel_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Bar Management ───────────────────────────────────────────────────────────
+
+export const barDrinks = pgTable("bar_drinks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  branchId: uuid("branch_id").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull().default("Beer"), // Beer | Wine | Spirit | Soft Drink | Water | Energy Drink | Other
+  brand: text("brand"),
+  sellingPrice: numeric("selling_price").notNull(),
+  quantityAvailable: integer("quantity_available").notNull().default(0),
+  lowStockThreshold: integer("low_stock_threshold").notNull().default(5),
+  barcode: text("barcode"),
+  imageUrl: text("image_url"),
+  status: text("status").notNull().default("available"), // available | out_of_stock
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const barWaiters = pgTable("bar_waiters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  branchId: uuid("branch_id").notNull(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const barShifts = pgTable("bar_shifts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  barAttendantId: uuid("bar_attendant_id").notNull(),
+  barAttendantName: text("bar_attendant_name").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  status: text("status").notNull().default("active"), // active | closed
+  openTime: timestamp("open_time").notNull().defaultNow(),
+  closeTime: timestamp("close_time"),
+  openingStockSnapshot: jsonb("opening_stock_snapshot").notNull().default([]),
+  closingStockSnapshot: jsonb("closing_stock_snapshot").notNull().default([]),
+  totalRevenue: numeric("total_revenue").notNull().default("0"),
+  totalBottlesSold: integer("total_bottles_sold").notNull().default(0),
+  totalTransactions: integer("total_transactions").notNull().default(0),
+});
+
+export const barSales = pgTable("bar_sales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  barShiftId: uuid("bar_shift_id"),
+  barAttendantId: uuid("bar_attendant_id").notNull(),
+  barAttendantName: text("bar_attendant_name").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  waiterName: text("waiter_name"),
+  paymentMethod: text("payment_method").notNull().default("cash"), // cash | pos | bank_transfer | card
+  totalAmount: numeric("total_amount").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const barSaleItems = pgTable("bar_sale_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  barSaleId: uuid("bar_sale_id").notNull(),
+  drinkId: uuid("drink_id").notNull(),
+  drinkName: text("drink_name").notNull(),
+  category: text("category").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: numeric("unit_price").notNull(),
+  subtotal: numeric("subtotal").notNull(),
+});
+
+export const insertBarDrinkSchema = z.object({
+  branchId: z.string().uuid(),
+  name: z.string().min(1),
+  category: z.enum(["Beer", "Wine", "Spirit", "Soft Drink", "Water", "Energy Drink", "Other"]),
+  brand: z.string().optional(),
+  sellingPrice: z.number().min(0),
+  quantityAvailable: z.number().int().min(0).default(0),
+  lowStockThreshold: z.number().int().min(0).default(5),
+  barcode: z.string().optional(),
+  imageUrl: z.string().optional(),
+  status: z.enum(["available", "out_of_stock"]).default("available"),
+});
+
+export const updateBarDrinkSchema = insertBarDrinkSchema.partial().omit({ branchId: true });
+
+export const insertBarWaiterSchema = z.object({
+  branchId: z.string().uuid(),
+  name: z.string().min(1),
+  active: z.boolean().default(true),
+});
+
+export const startBarShiftSchema = z.object({});
+
+export const createBarSaleSchema = z.object({
+  waiterName: z.string().optional(),
+  paymentMethod: z.enum(["cash", "pos", "bank_transfer", "card"]).default("cash"),
+  items: z.array(z.object({
+    drinkId: z.string().uuid(),
+    quantity: z.number().int().min(1),
+  })).min(1),
+});
+
+export type BarDrink = typeof barDrinks.$inferSelect;
+export type BarWaiter = typeof barWaiters.$inferSelect;
+export type BarShift = typeof barShifts.$inferSelect;
+export type BarSale = typeof barSales.$inferSelect;
+export type BarSaleItem = typeof barSaleItems.$inferSelect;
+
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -233,9 +336,9 @@ export const createReceptionistSchema = z.object({
   password: z.string().min(6),
   fullName: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin"]).default("receptionist"),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant"]).default("receptionist"),
   avatarUrl: z.string().optional(),
-  // Required for receptionist/supervisor; admins are branch-agnostic. Enforced in the route handler
+  // Required for receptionist/supervisor/bar_attendant; admins are branch-agnostic. Enforced in the route handler
   // since the requirement depends on the chosen role, not on the field alone.
   branchId: z.string().uuid().optional(),
 });
@@ -254,7 +357,7 @@ export const updateHotelSettingsSchema = z.object({
 export const updateReceptionistSchema = z.object({
   fullName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin"]).optional(),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant"]).optional(),
   avatarUrl: z.string().optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),

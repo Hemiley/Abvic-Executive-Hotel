@@ -123,6 +123,92 @@ export type HotelSettings = {
   updatedAt: string;
 };
 
+export type BarDrink = {
+  id: string;
+  branchId: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  sellingPrice: string;
+  quantityAvailable: number;
+  lowStockThreshold: number;
+  barcode: string | null;
+  imageUrl: string | null;
+  status: "available" | "out_of_stock";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BarWaiter = {
+  id: string;
+  branchId: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+};
+
+export type BarShift = {
+  id: string;
+  barAttendantId: string;
+  barAttendantName: string;
+  branchId: string;
+  status: "active" | "closed";
+  openTime: string;
+  closeTime: string | null;
+  openingStockSnapshot: any[];
+  closingStockSnapshot: any[];
+  totalRevenue: string;
+  totalBottlesSold: number;
+  totalTransactions: number;
+};
+
+export type BarSaleItem = {
+  id: string;
+  barSaleId: string;
+  drinkId: string;
+  drinkName: string;
+  category: string;
+  quantity: number;
+  unitPrice: string;
+  subtotal: string;
+};
+
+export type BarSale = {
+  id: string;
+  barShiftId: string | null;
+  barAttendantId: string;
+  barAttendantName: string;
+  branchId: string;
+  invoiceNumber: string;
+  waiterName: string | null;
+  paymentMethod: string;
+  totalAmount: string;
+  createdAt: string;
+  items?: BarSaleItem[];
+};
+
+export type BarDashboard = {
+  shift: BarShift | null;
+  totalDrinksInStock: number;
+  totalDrinkTypes: number;
+  lowStockCount: number;
+  lowStockDrinks: BarDrink[];
+  todaySalesCount: number;
+  todayBottlesSold: number;
+  todayRevenue: number;
+  recentTransactions: BarSale[];
+};
+
+export type BarReport = {
+  totalRevenue: number;
+  totalBottlesSold: number;
+  totalTransactions: number;
+  topSelling: { id: string; name: string; category: string; qty: number; revenue: number }[];
+  salesByWaiter: { name: string; sales: number; revenue: number }[];
+  lowStockDrinks: BarDrink[];
+  sales: (BarSale & { items: BarSaleItem[] })[];
+};
+
 export type DashboardSummary = {
   shiftActive: boolean;
   shift: Shift | null;
@@ -244,6 +330,42 @@ export const api = {
   getSettings: () => request<HotelSettings>("/api/settings"),
   updateSettings: (data: Partial<{ hotelName: string; logoUrl: string; backgroundStyle: string; bgOpacity: number; bgBlur: number; fontColor: string; fontSize: number; shortRestHourlyRate: number }>) =>
     request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Bar Management
+  getBarDrinks: () => request<BarDrink[]>("/api/bar/drinks"),
+  createBarDrink: (data: Partial<BarDrink>) => request<BarDrink>("/api/bar/drinks", { method: "POST", body: JSON.stringify(data) }),
+  updateBarDrink: (id: string, data: Partial<BarDrink>) => request<BarDrink>(`/api/bar/drinks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteBarDrink: (id: string) => request<{ ok: boolean }>(`/api/bar/drinks/${id}`, { method: "DELETE" }),
+
+  getBarWaiters: () => request<BarWaiter[]>("/api/bar/waiters"),
+  createBarWaiter: (data: { branchId: string; name: string }) => request<BarWaiter>("/api/bar/waiters", { method: "POST", body: JSON.stringify(data) }),
+  updateBarWaiter: (id: string, data: { name?: string; active?: boolean }) => request<BarWaiter>(`/api/bar/waiters/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteBarWaiter: (id: string) => request<{ ok: boolean }>(`/api/bar/waiters/${id}`, { method: "DELETE" }),
+
+  startBarShift: () => request<BarShift>("/api/bar/shifts/start", { method: "POST", body: JSON.stringify({}) }),
+  getCurrentBarShift: () => request<BarShift | null>("/api/bar/shifts/current"),
+  getBarShifts: () => request<BarShift[]>("/api/bar/shifts"),
+  closeBarShift: (id: string) => request<BarShift>(`/api/bar/shifts/${id}/close`, { method: "POST", body: JSON.stringify({}) }),
+
+  createBarSale: (data: { waiterName?: string; paymentMethod: string; items: { drinkId: string; quantity: number }[] }) =>
+    request<{ sale: BarSale; items: BarSaleItem[] }>("/api/bar/sales", { method: "POST", body: JSON.stringify(data) }),
+  getBarSales: (range?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (range?.from) params.set("from", range.from);
+    if (range?.to) params.set("to", range.to);
+    const qs = params.toString();
+    return request<BarSale[]>(`/api/bar/sales${qs ? `?${qs}` : ""}`);
+  },
+  getBarSaleById: (id: string) => request<{ sale: BarSale; items: BarSaleItem[] }>(`/api/bar/sales/${id}`),
+
+  getBarDashboard: () => request<BarDashboard>("/api/bar/dashboard"),
+  getBarReports: (range?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (range?.from) params.set("from", range.from);
+    if (range?.to) params.set("to", range.to);
+    const qs = params.toString();
+    return request<BarReport>(`/api/bar/reports${qs ? `?${qs}` : ""}`);
+  },
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),

@@ -1,0 +1,167 @@
+Add Bar Management Portal that enables bar attendants to efficiently manage inventory, process sales, track daily transactions, and generate receipts. The system should support multiple shifts, maintain accurate stock records, and provide detailed sales reporting.
+
+After login as a bar attendant of any branch, the Bar Attendant should see:
+
+Total drinks in stock.
+Low-stock alerts.
+Today's sales summary.
+Total bottles sold.
+Revenue generated.
+Current shift status (Open/Closed).
+Recent transactions.
+
+Drink Inventory Management
+
+The system should allow the Super Admin to:
+
+Add new drinks.
+Edit drink details.
+Delete drinks.
+Categorize drinks (Beer, Wine, Spirit, Soft Drinks, Water, Energy Drinks, etc.).
+Set selling price.
+Record available quantity.
+Track stock movement.
+Receive notifications when stock is low.
+View stock history.
+
+Each drink should include:
+
+Drink Name
+Category
+Brand
+Selling Price
+Quantity Available
+Barcode (Optional)
+Image (Optional)
+Status (Available/Out of Stock)
+
+Sales Module
+
+The Bar Attendant should be able to:
+
+Select the waiter or waitress from a list or enter their name.
+Add multiple drinks to a single order.
+Specify:
+Drink name
+Quantity
+Unit price
+Automatically calculate:
+Item subtotal
+Grand total
+Automatically deduct sold quantities from inventory.
+Save every transaction.
+
+Each sale should generate a unique invoice number.
+
+Receipt Generation
+
+After completing a sale, the system should generate a professional receipt containing:
+
+Company Name
+Company Logo
+Invoice Number
+Date & Time
+Waiter/Waitress Name
+Drinks Sold
+Quantity
+Unit Price
+Total Amount
+Bar Attendant's Name
+Payment Method
+QR Code (Optional)
+
+The receipt should support:
+
+Printing to a POS thermal printer.
+Downloading as PDF.
+Reprinting previous receipts.
+Emailing receipts (Optional).
+
+Waiter/Waitress Sales History
+
+Each waiter or waitress should have:
+
+Purchase history.
+Total drinks collected.
+Outstanding balance (if credit is allowed).
+Daily transaction records.
+
+Search by:
+
+Name
+Date
+Invoice Number
+
+Shift Management
+
+The system must support multiple work shifts.
+
+The Bar Attendant should be able to:
+
+Open a shift.
+View current shift sales.
+Close the shift at the end of duty.
+
+When a shift is closed:
+
+Calculate total revenue.
+Calculate total drinks sold.
+Record opening and closing stock.
+Generate a Shift Summary Report.
+Lock the shift to prevent further editing.
+Allow the next attendant to start a new shift with a fresh session.
+
+Daily Sales Reports
+
+Generate reports by:
+
+Today
+Yesterday
+Weekly
+Monthly
+Custom Date Range
+
+Reports should include:
+
+Total Revenue
+Number of Transactions
+Drinks Sold
+Top-Selling Drinks
+Low Stock Items
+Sales by Waiter/Waitress
+Sales by Bar Attendant
+
+Reports should be exportable to:
+
+PDF
+Excel
+CSV
+
+Notifications
+
+Notify users when:
+
+Stock is running low.
+A shift has been closed.
+Inventory is updated.
+Daily sales target has been achieved.
+
+Search & Filters
+
+Enable searches by:
+
+Drink Name
+Waiter/Waitress
+Invoice Number
+Date
+Category
+Bar Attendant
+
+POS & Printing
+
+Support:
+
+USB POS thermal printers.
+Bluetooth POS printers.
+Network printers.
+Standard A4 printers.

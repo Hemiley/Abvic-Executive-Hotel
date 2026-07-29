@@ -277,6 +277,7 @@ export default function Staff() {
                 <select value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}>
                   <option value="receptionist">Receptionist</option>
                   <option value="supervisor">Supervisor</option>
+                  <option value="bar_attendant">Bar Attendant</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -362,6 +363,7 @@ export default function Staff() {
                 <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
                   <option value="receptionist">Receptionist</option>
                   <option value="supervisor">Supervisor</option>
+                  <option value="bar_attendant">Bar Attendant</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

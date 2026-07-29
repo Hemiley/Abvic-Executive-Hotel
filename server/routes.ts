@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
+import { nanoid } from "nanoid";
 import { storage } from "./storage";
 import {
   loginSchema,
@@ -16,6 +17,10 @@ import {
   createReceptionistSchema,
   updateReceptionistSchema,
   updateHotelSettingsSchema,
+  insertBarDrinkSchema,
+  updateBarDrinkSchema,
+  insertBarWaiterSchema,
+  createBarSaleSchema,
 } from "@shared/schema";
 
 declare module "express-session" {
@@ -31,6 +36,15 @@ declare module "express-session" {
 function scopeBranchId(req: Request): string | undefined {
   if (req.session.role === "admin") return undefined;
   return req.session.branchId || undefined;
+}
+
+function requireBarAccess(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
+  storage.getReceptionistById(req.session.receptionistId).then((user) => {
+    if (!user || !user.active) { req.session.destroy(() => {}); return res.status(401).json({ message: "Session invalid" }); }
+    if (user.role !== "bar_attendant" && user.role !== "admin") return res.status(403).json({ message: "Bar access required" });
+    next();
+  }).catch(next);
 }
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -928,4 +942,241 @@ export function registerRoutes(app: Express) {
   });
 
   void nightsBetween;
+
+  // ── Bar Management Routes ──────────────────────────────────────────────────
+
+  // Bar Drinks — list (bar attendants + admin)
+  app.get("/api/bar/drinks", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req);
+    res.json(await storage.getBarDrinks(branchId));
+  });
+
+  app.post("/api/bar/drinks", requireAdmin, async (req, res) => {
+    const parsed = insertBarDrinkSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const drink = await storage.createBarDrink(parsed.data);
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_created", details: `${drink.name} added to bar inventory` });
+    res.status(201).json(drink);
+  });
+
+  app.patch("/api/bar/drinks/:id", requireAdmin, async (req, res) => {
+    const parsed = updateBarDrinkSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const updated = await storage.updateBarDrink(req.params.id, parsed.data);
+    if (!updated) return res.status(404).json({ message: "Drink not found" });
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_updated", details: `${updated.name} updated` });
+    res.json(updated);
+  });
+
+  app.delete("/api/bar/drinks/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteBarDrink(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Drink not found" });
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_deleted", details: `Drink ID ${req.params.id} removed` });
+    res.json({ ok: true });
+  });
+
+  // Bar Waiters
+  app.get("/api/bar/waiters", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req);
+    res.json(await storage.getBarWaiters(branchId));
+  });
+
+  app.post("/api/bar/waiters", requireBarAccess, async (req, res) => {
+    const parsed = insertBarWaiterSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const waiter = await storage.createBarWaiter(parsed.data);
+    res.status(201).json(waiter);
+  });
+
+  app.patch("/api/bar/waiters/:id", requireBarAccess, async (req, res) => {
+    const { name, active } = req.body;
+    const updated = await storage.updateBarWaiter(req.params.id, { name, active });
+    if (!updated) return res.status(404).json({ message: "Waiter not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/bar/waiters/:id", requireAdmin, async (req, res) => {
+    await storage.updateBarWaiter(req.params.id, { active: false });
+    res.json({ ok: true });
+  });
+
+  // Bar Shifts
+  app.post("/api/bar/shifts/start", requireBarAccess, async (req, res) => {
+    const existing = await storage.getActiveBarShiftForAttendant(req.session.receptionistId!);
+    if (existing) return res.status(409).json({ message: "Bar shift already active" });
+    const branchId = req.session.branchId;
+    if (!branchId) return res.status(400).json({ message: "Branch not set on session" });
+    const drinks = await storage.getBarDrinks(branchId);
+    const snapshot = drinks.map(d => ({ id: d.id, name: d.name, quantity: d.quantityAvailable }));
+    const shift = await storage.createBarShift({
+      barAttendantId: req.session.receptionistId!,
+      barAttendantName: req.session.receptionistName!,
+      branchId,
+      openingStockSnapshot: snapshot,
+    });
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_shift_start", details: `Bar shift started` });
+    res.status(201).json(shift);
+  });
+
+  app.get("/api/bar/shifts/current", requireBarAccess, async (req, res) => {
+    const shift = await storage.getActiveBarShiftForAttendant(req.session.receptionistId!);
+    res.json(shift || null);
+  });
+
+  app.get("/api/bar/shifts", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req);
+    const all = await storage.getAllBarShifts(branchId);
+    if (req.session.role === "bar_attendant") {
+      return res.json(all.filter(s => s.barAttendantId === req.session.receptionistId));
+    }
+    res.json(all);
+  });
+
+  app.post("/api/bar/shifts/:id/close", requireBarAccess, async (req, res) => {
+    const shift = await storage.getBarShiftById(req.params.id);
+    if (!shift || shift.barAttendantId !== req.session.receptionistId) return res.status(404).json({ message: "Bar shift not found" });
+    if (shift.status !== "active") return res.status(409).json({ message: "Shift already closed" });
+    const drinks = await storage.getBarDrinks(shift.branchId);
+    const snapshot = drinks.map(d => ({ id: d.id, name: d.name, quantity: d.quantityAvailable }));
+    const closed = await storage.closeBarShift(shift.id, snapshot);
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_shift_close", details: `Bar shift closed. Revenue: ${shift.totalRevenue}` });
+    await storage.createNotification({ type: "bar_shift_closed", message: `Bar shift closed by ${req.session.receptionistName}. Total revenue: ₦${Number(shift.totalRevenue).toLocaleString()}` });
+    res.json(closed);
+  });
+
+  // Bar Sales
+  app.post("/api/bar/sales", requireBarAccess, async (req, res) => {
+    const parsed = createBarSaleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const branchId = req.session.branchId;
+    if (!branchId) return res.status(400).json({ message: "Branch not set on session" });
+    const shift = await storage.getActiveBarShiftForAttendant(req.session.receptionistId!);
+    const invoiceNumber = `BAR-${nanoid(8).toUpperCase()}`;
+    let result;
+    try {
+      result = await storage.createBarSaleTransactional({
+        barShiftId: shift?.id,
+        barAttendantId: req.session.receptionistId!,
+        barAttendantName: req.session.receptionistName!,
+        branchId,
+        invoiceNumber,
+        waiterName: parsed.data.waiterName,
+        paymentMethod: parsed.data.paymentMethod,
+        items: parsed.data.items,
+      });
+    } catch (err: any) {
+      if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+      throw err;
+    }
+    if (shift) {
+      const bottlesSold = parsed.data.items.reduce((s, i) => s + i.quantity, 0);
+      await storage.incrementBarShiftStats(shift.id, {
+        totalRevenue: Number(result.sale.totalAmount),
+        totalBottlesSold: bottlesSold,
+        totalTransactions: 1,
+      });
+    }
+    // Low stock notifications
+    const branchDrinks = await storage.getBarDrinks(branchId);
+    for (const item of parsed.data.items) {
+      const drink = branchDrinks.find(d => d.id === item.drinkId);
+      if (drink && drink.quantityAvailable <= drink.lowStockThreshold) {
+        await storage.createNotification({ type: "bar_low_stock", message: `Low stock alert: ${drink.name} has ${drink.quantityAvailable} bottles remaining` });
+      }
+    }
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_sale", details: `Invoice ${invoiceNumber}, ₦${result.sale.totalAmount}` });
+    res.status(201).json({ sale: result.sale, items: result.items });
+  });
+
+  app.get("/api/bar/sales", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req);
+    const { from, to } = req.query as { from?: string; to?: string };
+    const dateFrom = from ? new Date(from) : undefined;
+    const dateTo = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59, 999); return d; })() : undefined;
+    const sales = await storage.getBarSales(branchId, dateFrom, dateTo);
+    if (req.session.role === "bar_attendant") {
+      return res.json(sales.filter(s => s.barAttendantId === req.session.receptionistId));
+    }
+    res.json(sales);
+  });
+
+  app.get("/api/bar/sales/:id", requireBarAccess, async (req, res) => {
+    const sale = await storage.getBarSaleById(req.params.id);
+    if (!sale) return res.status(404).json({ message: "Sale not found" });
+    const items = await storage.getBarSaleItems(sale.id);
+    res.json({ sale, items });
+  });
+
+  // Bar Dashboard summary
+  app.get("/api/bar/dashboard", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req) || req.session.branchId || undefined;
+    const shift = await storage.getActiveBarShiftForAttendant(req.session.receptionistId!);
+    const drinks = await storage.getBarDrinks(branchId);
+    const lowStock = drinks.filter(d => d.quantityAvailable <= d.lowStockThreshold);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const sales = await storage.getBarSales(branchId, today);
+    const attendantSales = req.session.role === "bar_attendant"
+      ? sales.filter(s => s.barAttendantId === req.session.receptionistId)
+      : sales;
+    const recentSales = await storage.getBarSales(branchId);
+    const recentAttendantSales = (req.session.role === "bar_attendant"
+      ? recentSales.filter(s => s.barAttendantId === req.session.receptionistId)
+      : recentSales).slice(0, 10);
+    res.json({
+      shift: shift || null,
+      totalDrinksInStock: drinks.reduce((s, d) => s + d.quantityAvailable, 0),
+      totalDrinkTypes: drinks.length,
+      lowStockCount: lowStock.length,
+      lowStockDrinks: lowStock.slice(0, 5),
+      todaySalesCount: attendantSales.length,
+      todayBottlesSold: 0, // computed from sales items in client
+      todayRevenue: attendantSales.reduce((s, sale) => s + Number(sale.totalAmount), 0),
+      recentTransactions: recentAttendantSales,
+    });
+  });
+
+  // Bar Reports (admin + bar_attendant)
+  app.get("/api/bar/reports", requireBarAccess, async (req, res) => {
+    const branchId = scopeBranchId(req) || req.session.branchId || undefined;
+    const { from, to } = req.query as { from?: string; to?: string };
+    const dateFrom = from ? new Date(from) : undefined;
+    const dateTo = to ? (() => { const d = new Date(to); d.setHours(23, 59, 59, 999); return d; })() : undefined;
+    const [sales, drinks] = await Promise.all([
+      storage.getBarSales(branchId, dateFrom, dateTo),
+      storage.getBarDrinks(branchId),
+    ]);
+    const attendantSales = req.session.role === "bar_attendant"
+      ? sales.filter(s => s.barAttendantId === req.session.receptionistId)
+      : sales;
+    // Enrich with items
+    const enriched = await Promise.all(attendantSales.map(async sale => ({
+      ...sale,
+      items: await storage.getBarSaleItems(sale.id),
+    })));
+    const totalRevenue = enriched.reduce((s, sale) => s + Number(sale.totalAmount), 0);
+    const totalBottlesSold = enriched.reduce((s, sale) => s + sale.items.reduce((si, i) => si + i.quantity, 0), 0);
+    // Top selling drinks
+    const drinkMap = new Map<string, { name: string; category: string; qty: number; revenue: number }>();
+    for (const sale of enriched) {
+      for (const item of sale.items) {
+        const existing = drinkMap.get(item.drinkId) || { name: item.drinkName, category: item.category, qty: 0, revenue: 0 };
+        drinkMap.set(item.drinkId, { ...existing, qty: existing.qty + item.quantity, revenue: existing.revenue + Number(item.subtotal) });
+      }
+    }
+    const topSelling = Array.from(drinkMap.entries()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.qty - a.qty).slice(0, 10);
+    // Sales by waiter
+    const waiterMap = new Map<string, { name: string; sales: number; revenue: number }>();
+    for (const sale of enriched) {
+      const key = sale.waiterName || "Direct";
+      const existing = waiterMap.get(key) || { name: key, sales: 0, revenue: 0 };
+      waiterMap.set(key, { ...existing, sales: existing.sales + 1, revenue: existing.revenue + Number(sale.totalAmount) });
+    }
+    const salesByWaiter = Array.from(waiterMap.values()).sort((a, b) => b.revenue - a.revenue);
+    const lowStockDrinks = drinks.filter(d => d.quantityAvailable <= d.lowStockThreshold);
+    res.json({
+      totalRevenue, totalBottlesSold, totalTransactions: enriched.length,
+      topSelling, salesByWaiter, lowStockDrinks,
+      sales: enriched,
+    });
+  });
 }

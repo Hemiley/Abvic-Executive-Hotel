@@ -10,6 +10,11 @@ import {
   auditLogs,
   notifications,
   hotelSettings,
+  barDrinks,
+  barWaiters,
+  barShifts,
+  barSales,
+  barSaleItems,
   type Branch,
   type InsertBranch,
   type UpdateBranch,
@@ -27,8 +32,13 @@ import {
   type CreateReceptionist,
   type UpdateReceptionist,
   type UpdateHotelSettings,
+  type BarDrink,
+  type BarWaiter,
+  type BarShift,
+  type BarSale,
+  type BarSaleItem,
 } from "@shared/schema";
-import { eq, desc, and, sql, gte, lte } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 
@@ -561,6 +571,186 @@ export const storage = {
   async roomBelongsToBranch(roomId: string, branchId: string): Promise<boolean> {
     const room = await this.getRoomById(roomId);
     return !!room && room.branchId === branchId;
+  },
+
+  // ── Bar Management ────────────────────────────────────────────────────────────
+
+  // Bar Drinks
+  async getBarDrinks(branchId?: string): Promise<BarDrink[]> {
+    if (branchId) return db.select().from(barDrinks).where(eq(barDrinks.branchId, branchId)).orderBy(barDrinks.name);
+    return db.select().from(barDrinks).orderBy(barDrinks.name);
+  },
+  async getBarDrinkById(id: string): Promise<BarDrink | undefined> {
+    const [d] = await db.select().from(barDrinks).where(eq(barDrinks.id, id));
+    return d;
+  },
+  async createBarDrink(data: {
+    branchId: string; name: string; category: string; brand?: string;
+    sellingPrice: number; quantityAvailable: number; lowStockThreshold: number;
+    barcode?: string; imageUrl?: string; status?: string;
+  }): Promise<BarDrink> {
+    const [d] = await db.insert(barDrinks).values({
+      ...data,
+      sellingPrice: String(data.sellingPrice),
+      status: data.status ?? (data.quantityAvailable > 0 ? "available" : "out_of_stock"),
+    }).returning();
+    return d;
+  },
+  async updateBarDrink(id: string, data: Partial<{
+    name: string; category: string; brand: string; sellingPrice: number;
+    quantityAvailable: number; lowStockThreshold: number; barcode: string;
+    imageUrl: string; status: string;
+  }>): Promise<BarDrink | undefined> {
+    const payload: any = { ...data, updatedAt: new Date() };
+    if (payload.sellingPrice !== undefined) payload.sellingPrice = String(payload.sellingPrice);
+    if (payload.quantityAvailable !== undefined) {
+      payload.status = payload.quantityAvailable > 0 ? "available" : "out_of_stock";
+    }
+    const [d] = await db.update(barDrinks).set(payload).where(eq(barDrinks.id, id)).returning();
+    return d;
+  },
+  async deleteBarDrink(id: string): Promise<boolean> {
+    const result = await db.delete(barDrinks).where(eq(barDrinks.id, id)).returning();
+    return result.length > 0;
+  },
+  async getLowStockDrinks(branchId?: string): Promise<BarDrink[]> {
+    const all = await this.getBarDrinks(branchId);
+    return all.filter(d => d.quantityAvailable <= d.lowStockThreshold);
+  },
+
+  // Bar Waiters
+  async getBarWaiters(branchId?: string): Promise<BarWaiter[]> {
+    if (branchId) return db.select().from(barWaiters).where(and(eq(barWaiters.branchId, branchId), eq(barWaiters.active, true))).orderBy(barWaiters.name);
+    return db.select().from(barWaiters).where(eq(barWaiters.active, true)).orderBy(barWaiters.name);
+  },
+  async createBarWaiter(data: { branchId: string; name: string }): Promise<BarWaiter> {
+    const [w] = await db.insert(barWaiters).values(data).returning();
+    return w;
+  },
+  async updateBarWaiter(id: string, data: { name?: string; active?: boolean }): Promise<BarWaiter | undefined> {
+    const [w] = await db.update(barWaiters).set(data).where(eq(barWaiters.id, id)).returning();
+    return w;
+  },
+  async deleteBarWaiter(id: string): Promise<boolean> {
+    const result = await db.delete(barWaiters).where(eq(barWaiters.id, id)).returning();
+    return result.length > 0;
+  },
+
+  // Bar Shifts
+  async getActiveBarShiftForAttendant(attendantId: string): Promise<BarShift | undefined> {
+    const [s] = await db.select().from(barShifts).where(and(eq(barShifts.barAttendantId, attendantId), eq(barShifts.status, "active")));
+    return s;
+  },
+  async createBarShift(data: { barAttendantId: string; barAttendantName: string; branchId: string; openingStockSnapshot: any[] }): Promise<BarShift> {
+    const [s] = await db.insert(barShifts).values({
+      ...data,
+      openingStockSnapshot: data.openingStockSnapshot,
+    }).returning();
+    return s;
+  },
+  async getBarShiftById(id: string): Promise<BarShift | undefined> {
+    const [s] = await db.select().from(barShifts).where(eq(barShifts.id, id));
+    return s;
+  },
+  async closeBarShift(id: string, closingStockSnapshot: any[]): Promise<BarShift | undefined> {
+    const [s] = await db.update(barShifts).set({
+      status: "closed",
+      closeTime: new Date(),
+      closingStockSnapshot,
+    }).where(eq(barShifts.id, id)).returning();
+    return s;
+  },
+  async incrementBarShiftStats(id: string, delta: { totalRevenue?: number; totalBottlesSold?: number; totalTransactions?: number }) {
+    const shift = await this.getBarShiftById(id);
+    if (!shift) return;
+    const next: any = {};
+    if (delta.totalRevenue) next.totalRevenue = String(Number(shift.totalRevenue) + delta.totalRevenue);
+    if (delta.totalBottlesSold) next.totalBottlesSold = shift.totalBottlesSold + delta.totalBottlesSold;
+    if (delta.totalTransactions) next.totalTransactions = shift.totalTransactions + delta.totalTransactions;
+    await db.update(barShifts).set(next).where(eq(barShifts.id, id));
+  },
+  async getAllBarShifts(branchId?: string): Promise<BarShift[]> {
+    if (branchId) return db.select().from(barShifts).where(eq(barShifts.branchId, branchId)).orderBy(desc(barShifts.openTime));
+    return db.select().from(barShifts).orderBy(desc(barShifts.openTime));
+  },
+
+  // Bar Sales
+  async createBarSaleTransactional(data: {
+    barShiftId?: string; barAttendantId: string; barAttendantName: string; branchId: string;
+    invoiceNumber: string; waiterName?: string; paymentMethod: string;
+    items: { drinkId: string; quantity: number }[];
+  }): Promise<{ sale: BarSale; items: BarSaleItem[] }> {
+    // Fetch all drink prices and validate stock
+    const drinkIds = data.items.map(i => i.drinkId);
+    const drinks = await db.select().from(barDrinks).where(inArray(barDrinks.id, drinkIds));
+    const drinkMap = new Map(drinks.map(d => [d.id, d]));
+
+    let totalAmount = 0;
+    const enrichedItems: { drinkId: string; drinkName: string; category: string; quantity: number; unitPrice: number; subtotal: number }[] = [];
+    for (const item of data.items) {
+      const drink = drinkMap.get(item.drinkId);
+      if (!drink) throw Object.assign(new Error(`Drink not found: ${item.drinkId}`), { statusCode: 404 });
+      if (drink.quantityAvailable < item.quantity) throw Object.assign(new Error(`Insufficient stock for ${drink.name}`), { statusCode: 409 });
+      const unitPrice = Number(drink.sellingPrice);
+      const subtotal = unitPrice * item.quantity;
+      totalAmount += subtotal;
+      enrichedItems.push({ drinkId: item.drinkId, drinkName: drink.name, category: drink.category, quantity: item.quantity, unitPrice, subtotal });
+    }
+
+    // Insert sale
+    const [sale] = await db.insert(barSales).values({
+      barShiftId: data.barShiftId,
+      barAttendantId: data.barAttendantId,
+      barAttendantName: data.barAttendantName,
+      branchId: data.branchId,
+      invoiceNumber: data.invoiceNumber,
+      waiterName: data.waiterName,
+      paymentMethod: data.paymentMethod,
+      totalAmount: String(totalAmount),
+    }).returning();
+
+    // Insert sale items
+    const saleItems: BarSaleItem[] = [];
+    for (const item of enrichedItems) {
+      const [si] = await db.insert(barSaleItems).values({
+        barSaleId: sale.id,
+        drinkId: item.drinkId,
+        drinkName: item.drinkName,
+        category: item.category,
+        quantity: item.quantity,
+        unitPrice: String(item.unitPrice),
+        subtotal: String(item.subtotal),
+      }).returning();
+      saleItems.push(si);
+
+      // Deduct stock
+      const drink = drinkMap.get(item.drinkId)!;
+      const newQty = drink.quantityAvailable - item.quantity;
+      await db.update(barDrinks).set({
+        quantityAvailable: newQty,
+        status: newQty > 0 ? "available" : "out_of_stock",
+        updatedAt: new Date(),
+      }).where(eq(barDrinks.id, item.drinkId));
+    }
+
+    return { sale, items: saleItems };
+  },
+  async getBarSales(branchId?: string, dateFrom?: Date, dateTo?: Date): Promise<BarSale[]> {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(barSales.branchId, branchId));
+    if (dateFrom) conditions.push(gte(barSales.createdAt, dateFrom));
+    if (dateTo) conditions.push(lte(barSales.createdAt, dateTo));
+    if (conditions.length) {
+      return db.select().from(barSales).where(and(...conditions)).orderBy(desc(barSales.createdAt));
+    }
+    return db.select().from(barSales).orderBy(desc(barSales.createdAt));
+  },
+  async getBarSaleById(id: string): Promise<BarSale | undefined> {
+    const [s] = await db.select().from(barSales).where(eq(barSales.id, id));
+    return s;
+  },
+  async getBarSaleItems(barSaleId: string): Promise<BarSaleItem[]> {
+    return db.select().from(barSaleItems).where(eq(barSaleItems.barSaleId, barSaleId));
   },
 
   // Hotel settings
