@@ -52,7 +52,7 @@ export default function BarInventory() {
     try {
       await api.createBarDrink({
         ...form,
-        sellingPrice: form.sellingPrice as any,
+        sellingPrice: Number(form.sellingPrice),
         quantityAvailable: Number(form.quantityAvailable),
         lowStockThreshold: Number(form.lowStockThreshold),
         brand: form.brand || undefined,
@@ -75,7 +75,7 @@ export default function BarInventory() {
         name: editForm.name,
         category: editForm.category as any,
         brand: editForm.brand || undefined,
-        sellingPrice: editForm.sellingPrice as any,
+        sellingPrice: Number(editForm.sellingPrice),
         quantityAvailable: Number(editForm.quantityAvailable),
         lowStockThreshold: Number(editForm.lowStockThreshold),
         barcode: editForm.barcode || undefined,
