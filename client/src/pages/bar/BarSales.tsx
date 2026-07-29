@@ -221,6 +221,7 @@ export default function BarSales() {
               <option value="pos">POS</option>
               <option value="card">Card</option>
               <option value="bank_transfer">Bank Transfer</option>
+              <option value="other">Other</option>
             </select>
           </div>
 

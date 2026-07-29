@@ -186,7 +186,7 @@ export const barSales = pgTable("bar_sales", {
   branchId: uuid("branch_id").notNull(),
   invoiceNumber: text("invoice_number").notNull().unique(),
   waiterName: text("waiter_name"),
-  paymentMethod: text("payment_method").notNull().default("cash"), // cash | pos | bank_transfer | card
+  paymentMethod: text("payment_method").notNull().default("cash"), // cash | pos | bank_transfer | card | other
   totalAmount: numeric("total_amount").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -227,7 +227,7 @@ export const startBarShiftSchema = z.object({});
 
 export const createBarSaleSchema = z.object({
   waiterName: z.string().optional(),
-  paymentMethod: z.enum(["cash", "pos", "bank_transfer", "card"]).default("cash"),
+  paymentMethod: z.enum(["cash", "pos", "bank_transfer", "card", "other"]).default("cash"),
   items: z.array(z.object({
     drinkId: z.string().uuid(),
     quantity: z.number().int().min(1),
