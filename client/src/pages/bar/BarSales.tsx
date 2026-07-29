@@ -132,13 +132,15 @@ export default function BarSales() {
 
   function printReceipt(data: { sale: BarSale; items: BarSaleItem[] }) {
     const html = generateReceiptHtml(data.sale, data.items, settings?.hotelName || "AEH", settings?.logoUrl);
-    const win = window.open("", "_blank", "width=420,height=700,noopener,noreferrer");
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank", "width=420,height=700");
     if (!win) return;
-    win.opener = null;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+    win.addEventListener("load", () => {
+      win.focus();
+      win.print();
+      URL.revokeObjectURL(url);
+    });
   }
 
   async function viewSale(sale: BarSale) {
