@@ -332,7 +332,7 @@ export const api = {
     request<HotelSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(data) }),
 
   // Bar Management
-  getBarDrinks: () => request<BarDrink[]>("/api/bar/drinks"),
+  getBarDrinks: (branchId?: string) => request<BarDrink[]>(`/api/bar/drinks${branchId ? `?branchId=${branchId}` : ""}`),
   createBarDrink: (data: Partial<BarDrink>) => request<BarDrink>("/api/bar/drinks", { method: "POST", body: JSON.stringify(data) }),
   updateBarDrink: (id: string, data: Partial<BarDrink>) => request<BarDrink>(`/api/bar/drinks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteBarDrink: (id: string) => request<{ ok: boolean }>(`/api/bar/drinks/${id}`, { method: "DELETE" }),

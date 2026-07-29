@@ -956,7 +956,10 @@ export function registerRoutes(app: Express) {
 
   // Bar Drinks — list (bar attendants + admin)
   app.get("/api/bar/drinks", requireBarAccess, async (req, res) => {
-    const branchId = scopeBranchId(req);
+    // Admin may pass ?branchId= to filter; others are scoped to their own branch
+    const branchId = req.session.role === "admin"
+      ? (typeof req.query.branchId === "string" && req.query.branchId ? req.query.branchId : undefined)
+      : scopeBranchId(req);
     res.json(await storage.getBarDrinks(branchId));
   });
 

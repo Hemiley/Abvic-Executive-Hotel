@@ -23,6 +23,7 @@ export default function BarInventory() {
   const canManage = user?.role === "admin" || user?.role === "supervisor";
   const [drinks, setDrinks] = useState<BarDrink[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [filterBranch, setFilterBranch] = useState("");
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
   const [showNew, setShowNew] = useState(false);
@@ -34,13 +35,13 @@ export default function BarInventory() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
-  function load() {
-    api.getBarDrinks().then(setDrinks).catch(e => setError(e.message));
+  function load(branch?: string) {
+    api.getBarDrinks(isAdmin ? branch : undefined).then(setDrinks).catch(e => setError(e.message));
     if (isAdmin) api.getBranches().then(setBranches).catch(() => {});
     else setForm(f => ({ ...f, branchId: user?.branchId || "" }));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(filterBranch || undefined); }, [filterBranch]);
 
   const filtered = drinks.filter(d => {
     const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) || (d.brand || "").toLowerCase().includes(search.toLowerCase());
@@ -133,6 +134,12 @@ export default function BarInventory() {
           onChange={e => setSearch(e.target.value)}
           style={{ flex: 1, minWidth: 200 }}
         />
+        {isAdmin && (
+          <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ minWidth: 160 }}>
+            <option value="">All Branches</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
         <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ minWidth: 140 }}>
           <option value="All">All Categories</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
