@@ -14,9 +14,6 @@ const emptyForm = {
   openingStock: "0",
   stockReceived: "0",
   minimumStock: "0",
-  supplier: "",
-  purchaseCost: "",
-  expiryDate: "",
   status: "available" as const,
 };
 
@@ -51,7 +48,7 @@ export default function KitchenInventory() {
   const filtered = items.filter(i => {
     const q = search.toLowerCase();
     return (filterCat === "All" || i.category === filterCat) &&
-      (i.name.toLowerCase().includes(q) || (i.supplier || "").toLowerCase().includes(q));
+        i.name.toLowerCase().includes(q);
   });
 
   async function handleCreate(e: React.FormEvent) {
@@ -64,7 +61,6 @@ export default function KitchenInventory() {
         openingStock: Number(form.openingStock),
         stockReceived: Number(form.stockReceived),
         minimumStock: Number(form.minimumStock),
-        purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : undefined,
         branchId: isAdmin ? form.branchId : (user?.branchId || ""),
       } as any);
       setShowNew(false);
@@ -85,9 +81,6 @@ export default function KitchenInventory() {
         unit: editForm.unit as any,
         pricePerUnit: Number(editForm.pricePerUnit) || 0,
         minimumStock: Number(editForm.minimumStock),
-        supplier: editForm.supplier || undefined,
-        purchaseCost: editForm.purchaseCost ? Number(editForm.purchaseCost) : undefined,
-        expiryDate: editForm.expiryDate || undefined,
         status: editForm.status,
       } as any);
       setEditing(null);
@@ -126,9 +119,6 @@ export default function KitchenInventory() {
       openingStock: item.openingStock,
       stockReceived: item.stockReceived,
       minimumStock: item.minimumStock,
-      supplier: item.supplier || "",
-      purchaseCost: item.purchaseCost || "",
-      expiryDate: item.expiryDate || "",
       status: item.status as any,
     });
   }
@@ -163,13 +153,13 @@ export default function KitchenInventory() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
           <thead>
             <tr>
-              {["Name", "Category", "Unit", "Price/Unit", "Current Stock", "Min. Stock", "Status", "Expiry", "Actions"].map(h => (
+              {["Name", "Category", "Unit", "Price/Unit", "Current Stock", "Min. Stock", "Status", "Actions"].map(h => (
                 <th key={h} style={{ padding: "10px 12px", textAlign: "left", background: "rgba(255,255,255,0.05)", color: "var(--muted)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: "var(--muted)" }}>No items found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: "var(--muted)" }}>No items found</td></tr>}
             {filtered.map(item => (
               <tr key={item.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 <td style={{ padding: "10px 12px", fontWeight: 600 }}>{item.name}</td>
@@ -187,7 +177,6 @@ export default function KitchenInventory() {
                     {item.status.replace("_", " ")}
                   </span>
                 </td>
-                <td style={{ padding: "10px 12px", color: "var(--muted)", fontSize: "0.8rem" }}>{item.expiryDate || "—"}</td>
                 <td style={{ padding: "10px 12px" }}>
                   {canManage && (
                     <div style={{ display: "flex", gap: 6 }}>
@@ -233,9 +222,6 @@ export default function KitchenInventory() {
                 <div className="field"><label>Opening Stock</label><input type="number" min="0" value={form.openingStock} onChange={e => setForm(f => ({ ...f, openingStock: e.target.value }))} /></div>
                 <div className="field"><label>Stock Received</label><input type="number" min="0" value={form.stockReceived} onChange={e => setForm(f => ({ ...f, stockReceived: e.target.value }))} /></div>
                 <div className="field"><label>Minimum Stock Level</label><input type="number" min="0" value={form.minimumStock} onChange={e => setForm(f => ({ ...f, minimumStock: e.target.value }))} /></div>
-                <div className="field"><label>Supplier</label><input value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))} /></div>
-                <div className="field"><label>Purchase Cost (₦)</label><input type="number" min="0" value={form.purchaseCost} onChange={e => setForm(f => ({ ...f, purchaseCost: e.target.value }))} /></div>
-                <div className="field"><label>Expiry Date</label><input type="date" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} /></div>
               </div>
               {error && <p className="error-text">{error}</p>}
               <div className="modal-actions">
@@ -267,9 +253,6 @@ export default function KitchenInventory() {
                 </div>
                 <div className="field"><label>Price per Unit (₦)</label><input type="number" min="0" value={editForm.pricePerUnit} onChange={e => setEditForm(f => ({ ...f, pricePerUnit: e.target.value }))} /></div>
                 <div className="field"><label>Min. Stock Level</label><input type="number" min="0" value={editForm.minimumStock} onChange={e => setEditForm(f => ({ ...f, minimumStock: e.target.value }))} /></div>
-                <div className="field"><label>Supplier</label><input value={editForm.supplier} onChange={e => setEditForm(f => ({ ...f, supplier: e.target.value }))} /></div>
-                <div className="field"><label>Purchase Cost (₦)</label><input type="number" min="0" value={editForm.purchaseCost} onChange={e => setEditForm(f => ({ ...f, purchaseCost: e.target.value }))} /></div>
-                <div className="field"><label>Expiry Date</label><input type="date" value={editForm.expiryDate} onChange={e => setEditForm(f => ({ ...f, expiryDate: e.target.value }))} /></div>
                 <div className="field"><label>Status</label>
                   <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value as any }))}>
                     <option value="available">Available</option>
