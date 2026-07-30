@@ -134,16 +134,29 @@ export default function BarLayout({ children }: { children: ReactNode }) {
           ))}
 
           {/* Sidebar notification entry */}
-          <div className="sidebar-notif-wrap" ref={sidebarNotifRef}>
+          <div style={{ position: "relative" }} ref={sidebarNotifRef}>
             <button
-              className="nav-link notif-nav-btn"
               onClick={() => setSidebarNotifOpen(o => !o)}
-              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: sidebarNotifOpen ? "rgba(124,139,255,0.12)" : undefined }}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "10px 12px", borderRadius: 10,
+                background: sidebarNotifOpen ? "rgba(124,139,255,0.12)" : "transparent",
+                border: "none", cursor: "pointer",
+                color: "var(--muted)", fontSize: 14, fontWeight: 500,
+                textAlign: "left", transition: "all 0.2s ease",
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = "rgba(124,139,255,0.12)"; e.currentTarget.style.color = "var(--text)"; }}
+              onMouseOut={e => { e.currentTarget.style.background = sidebarNotifOpen ? "rgba(124,139,255,0.12)" : "transparent"; e.currentTarget.style.color = "var(--muted)"; }}
             >
-              <span className="nav-icon">🔔</span>
-              Notifications
+              <span style={{ fontSize: 16 }}>🔔</span>
+              <span style={{ flex: 1 }}>Notifications</span>
               {unread > 0 && (
-                <span className="notif-badge sidebar-notif-badge">{unread > 99 ? "99+" : unread}</span>
+                <span style={{
+                  background: "var(--danger)", color: "#fff",
+                  fontSize: 10, borderRadius: 999, padding: "1px 6px", fontWeight: 700,
+                }}>
+                  {unread > 99 ? "99+" : unread}
+                </span>
               )}
             </button>
 
