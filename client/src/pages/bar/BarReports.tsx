@@ -8,6 +8,18 @@ const FOOD_STATUS_COLORS: Record<string, string> = {
   ready: "#4ade80", served: "#94a3b8", cancelled: "#f87171",
 };
 
+function parseUnitPrice(notes: string | null | undefined): number {
+  if (!notes) return 0;
+  const m = notes.match(/₦([\d,]+(?:\.\d+)?)/);
+  return m ? Number(m[1].replace(/,/g, "")) : 0;
+}
+
+function foodOrderTotal(items: KitchenOrderItem[]): number {
+  return items.reduce((sum, it) => sum + parseUnitPrice(it.notes) * it.quantity, 0);
+}
+
+const fmtFood = (n: number) => `₦${n.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+
 type Range = { from: string; to: string; label: string };
 
 function todayRange(): { from: string; to: string } {
@@ -187,9 +199,9 @@ export default function BarReports() {
     if (!foodOrders) return;
     const wb = XLSX.utils.book_new();
     const hotelName = settings?.hotelName || "AEH";
-
     const served = foodOrders.filter(o => o.status === "served").length;
     const cancelled = foodOrders.filter(o => o.status === "cancelled").length;
+    const grandTotal = foodOrders.reduce((s, o) => s + foodOrderTotal(o.items ?? []), 0);
     const summaryData = [
       [hotelName],
       ["Bar Food Sales Report", range.label],
@@ -200,30 +212,33 @@ export default function BarReports() {
       ["Served", served],
       ["Cancelled", cancelled],
       ["Active / Pending", foodOrders.length - served - cancelled],
+      ["Grand Total (₦)", grandTotal],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
     ws1["!cols"] = [{ wch: 28 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws1, "Summary");
 
-    const orderHeaders = ["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"];
+    const orderHeaders = ["Order #", "Customer", "Table / Room", "Staff / Waiter", "Priority", "Status", "Items", "Amount (₦)", "Time"];
     const orderRows = foodOrders.map(o => [
       o.orderNumber, o.customerName ?? "", o.tableOrRoom ?? "",
       o.staffName, o.priority, o.status, o.items?.length ?? 0,
+      foodOrderTotal(o.items ?? []),
       new Date(o.createdAt).toLocaleString("en-NG"),
     ]);
     const ws2 = XLSX.utils.aoa_to_sheet([orderHeaders, ...orderRows]);
     ws2["!cols"] = orderHeaders.map(() => ({ wch: 18 }));
     XLSX.utils.book_append_sheet(wb, ws2, "Orders");
 
-    const itemHeaders = ["Order #", "Meal", "Qty", "Notes"];
+    const itemHeaders = ["Order #", "Staff / Waiter", "Meal", "Qty", "Unit Price (₦)", "Subtotal (₦)", "Notes"];
     const itemRows: (string | number)[][] = [];
     for (const o of foodOrders) {
       for (const it of o.items ?? []) {
-        itemRows.push([o.orderNumber, it.mealName, it.quantity, it.notes ?? ""]);
+        const up = parseUnitPrice(it.notes);
+        itemRows.push([o.orderNumber, o.staffName, it.mealName, it.quantity, up, up * it.quantity, it.notes ?? ""]);
       }
     }
     const ws3 = XLSX.utils.aoa_to_sheet([itemHeaders, ...itemRows]);
-    ws3["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 30 }];
+    ws3["!cols"] = [{ wch: 14 }, { wch: 22 }, { wch: 28 }, { wch: 6 }, { wch: 14 }, { wch: 14 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, ws3, "Items Detail");
 
     XLSX.writeFile(wb, `food-sales-bar-${range.from}-to-${range.to}.xlsx`);
@@ -231,9 +246,10 @@ export default function BarReports() {
 
   function exportFoodCsv() {
     if (!foodOrders) return;
-    const header = "Order #,Customer,Table / Room,Staff,Priority,Status,Items,Time\n";
+    const header = "Order #,Customer,Table / Room,Staff / Waiter,Priority,Status,Items,Amount (₦),Time\n";
     const rows = foodOrders.map(o =>
-      [o.orderNumber, o.customerName ?? "", o.tableOrRoom ?? "", o.staffName, o.priority, o.status, o.items?.length ?? 0, new Date(o.createdAt).toLocaleString("en-NG")]
+      [o.orderNumber, o.customerName ?? "", o.tableOrRoom ?? "", o.staffName, o.priority, o.status,
+        o.items?.length ?? 0, foodOrderTotal(o.items ?? []), new Date(o.createdAt).toLocaleString("en-NG")]
         .map(v => `"${String(v).replace(/"/g, '""')}"`)
         .join(",")
     ).join("\n");
@@ -465,9 +481,9 @@ export default function BarReports() {
           <div className="stat-grid" style={{ marginBottom: 16 }}>
             {[
               { label: "Total Orders", value: foodOrders.length, icon: "📋" },
+              { label: "Total Amount", value: fmtFood(foodOrders.reduce((s, o) => s + foodOrderTotal(o.items ?? []), 0)), icon: "💰" },
               { label: "Served", value: foodOrders.filter(o => o.status === "served").length, icon: "✅" },
               { label: "Cancelled", value: foodOrders.filter(o => o.status === "cancelled").length, icon: "❌" },
-              { label: "Active / Pending", value: foodOrders.filter(o => !["served", "cancelled"].includes(o.status)).length, icon: "⏳" },
             ].map(c => (
               <div key={c.label} className="stat-card glass">
                 <div className="stat-icon">{c.icon}</div>
@@ -491,28 +507,42 @@ export default function BarReports() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
               <thead>
                 <tr>
-                  {["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"].map(h => (
+                  {["Order #", "Customer", "Table / Room", "Staff / Waiter", "Priority", "Status", "Items", "Amount", "Time"].map(h => (
                     <th key={h} style={{ padding: "10px 14px", background: "rgba(255,255,255,0.05)", color: "var(--muted)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", textAlign: "left" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {foodOrders.map(o => (
-                  <tr key={o.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <td style={{ padding: "8px 14px", fontFamily: "monospace", fontSize: "0.8rem" }}>#{o.orderNumber}</td>
-                    <td style={{ padding: "8px 14px" }}>{o.customerName || "—"}</td>
-                    <td style={{ padding: "8px 14px" }}>{o.tableOrRoom || "—"}</td>
-                    <td style={{ padding: "8px 14px" }}>{o.staffName}</td>
-                    <td style={{ padding: "8px 14px", textTransform: "capitalize" }}>
-                      <span style={{ fontWeight: o.priority !== "normal" ? 700 : 400, color: o.priority === "vip" ? "#f59e0b" : o.priority === "urgent" ? "#f87171" : "inherit" }}>{o.priority}</span>
-                    </td>
-                    <td style={{ padding: "8px 14px" }}>
-                      <span style={{ color: FOOD_STATUS_COLORS[o.status] ?? "inherit", fontWeight: 600, textTransform: "capitalize" }}>{o.status}</span>
-                    </td>
-                    <td style={{ padding: "8px 14px" }}>{o.items?.length ?? 0}</td>
-                    <td style={{ padding: "8px 14px", color: "var(--muted)", fontSize: "0.8rem" }}>{new Date(o.createdAt).toLocaleString("en-NG")}</td>
-                  </tr>
-                ))}
+                {foodOrders.map(o => {
+                  const total = foodOrderTotal(o.items ?? []);
+                  return (
+                    <tr key={o.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      <td style={{ padding: "8px 14px", fontFamily: "monospace", fontSize: "0.8rem" }}>#{o.orderNumber}</td>
+                      <td style={{ padding: "8px 14px" }}>{o.customerName || "—"}</td>
+                      <td style={{ padding: "8px 14px" }}>{o.tableOrRoom || "—"}</td>
+                      <td style={{ padding: "8px 14px", fontWeight: 600 }}>{o.staffName}</td>
+                      <td style={{ padding: "8px 14px", textTransform: "capitalize" }}>
+                        <span style={{ fontWeight: o.priority !== "normal" ? 700 : 400, color: o.priority === "vip" ? "#f59e0b" : o.priority === "urgent" ? "#f87171" : "inherit" }}>{o.priority}</span>
+                      </td>
+                      <td style={{ padding: "8px 14px" }}>
+                        <span style={{ color: FOOD_STATUS_COLORS[o.status] ?? "inherit", fontWeight: 600, textTransform: "capitalize" }}>{o.status}</span>
+                      </td>
+                      <td style={{ padding: "8px 14px" }}>{o.items?.length ?? 0}</td>
+                      <td style={{ padding: "8px 14px", fontWeight: 700, color: total > 0 ? "#6366f1" : "var(--muted)" }}>
+                        {total > 0 ? fmtFood(total) : "—"}
+                      </td>
+                      <td style={{ padding: "8px 14px", color: "var(--muted)", fontSize: "0.8rem" }}>{new Date(o.createdAt).toLocaleString("en-NG")}</td>
+                    </tr>
+                  );
+                })}
+                {/* Totals row */}
+                <tr style={{ borderTop: "2px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.03)" }}>
+                  <td colSpan={7} style={{ padding: "10px 14px", fontWeight: 700, color: "var(--muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>Total</td>
+                  <td style={{ padding: "10px 14px", fontWeight: 700, color: "#6366f1" }}>
+                    {fmtFood(foodOrders.reduce((s, o) => s + foodOrderTotal(o.items ?? []), 0))}
+                  </td>
+                  <td />
+                </tr>
               </tbody>
             </table>
           </div>
