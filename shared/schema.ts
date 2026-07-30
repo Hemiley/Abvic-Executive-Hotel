@@ -202,6 +202,113 @@ export const barSaleItems = pgTable("bar_sale_items", {
   subtotal: numeric("subtotal").notNull(),
 });
 
+// ─── Kitchen Management ───────────────────────────────────────────────────────
+
+export const kitchenInventory = pgTable("kitchen_inventory", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  branchId: uuid("branch_id").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // Meat|Poultry|Seafood|Grains|Vegetables|Oils & Fats|Seasonings|Drinks|Frozen|Other
+  unit: text("unit").notNull().default("kg"), // kg|liters|cartons|pieces|packs|bags|bottles
+  pricePerUnit: numeric("price_per_unit").notNull().default("0"),
+  openingStock: numeric("opening_stock").notNull().default("0"),
+  stockReceived: numeric("stock_received").notNull().default("0"),
+  currentStock: numeric("current_stock").notNull().default("0"),
+  minimumStock: numeric("minimum_stock").notNull().default("0"),
+  supplier: text("supplier"),
+  purchaseCost: numeric("purchase_cost"),
+  expiryDate: text("expiry_date"),
+  status: text("status").notNull().default("available"), // available|low_stock|out_of_stock
+  lastUpdated: timestamp("last_updated").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const kitchenStockMovements = pgTable("kitchen_stock_movements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemId: uuid("item_id").notNull(),
+  itemName: text("item_name").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  type: text("type").notNull(), // received|used|waste|adjustment
+  quantity: numeric("quantity").notNull(),
+  note: text("note"),
+  staffId: text("staff_id"),
+  staffName: text("staff_name"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const kitchenShifts = pgTable("kitchen_shifts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  chefId: uuid("chef_id").notNull(),
+  chefName: text("chef_name").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  status: text("status").notNull().default("active"), // active|closed
+  startTime: timestamp("start_time").notNull().defaultNow(),
+  endTime: timestamp("end_time"),
+  openingStockSnapshot: jsonb("opening_stock_snapshot"),
+  closingStockSnapshot: jsonb("closing_stock_snapshot"),
+  notes: text("notes"),
+  ordersCompleted: integer("orders_completed").notNull().default(0),
+  mealsCooked: integer("meals_cooked").notNull().default(0),
+});
+
+export const kitchenOrders = pgTable("kitchen_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderNumber: text("order_number").notNull().unique(),
+  branchId: uuid("branch_id").notNull(),
+  tableOrRoom: text("table_or_room"),
+  customerName: text("customer_name"),
+  source: text("source").notNull().default("restaurant"), // restaurant|bar|room_service|reception
+  staffId: text("staff_id"),
+  staffName: text("staff_name").notNull(),
+  status: text("status").notNull().default("new"), // new|accepted|preparing|ready|served|cancelled
+  priority: text("priority").notNull().default("normal"), // normal|urgent|vip
+  specialInstructions: text("special_instructions"),
+  estimatedMinutes: integer("estimated_minutes"),
+  shiftId: uuid("shift_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const kitchenOrderItems = pgTable("kitchen_order_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id").notNull(),
+  mealName: text("meal_name").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  notes: text("notes"),
+});
+
+// Kitchen Zod schemas
+export const insertKitchenInventorySchema = z.object({
+  branchId: z.string().uuid(),
+  name: z.string().min(1),
+  category: z.enum(["Meat", "Poultry", "Seafood", "Grains", "Vegetables", "Oils & Fats", "Seasonings", "Drinks", "Frozen", "Other"]),
+  unit: z.enum(["kg", "liters", "cartons", "pieces", "packs", "bags", "bottles"]).default("kg"),
+  pricePerUnit: z.number().min(0).default(0),
+  openingStock: z.number().min(0).default(0),
+  stockReceived: z.number().min(0).default(0),
+  minimumStock: z.number().min(0).default(0),
+  supplier: z.string().optional(),
+  purchaseCost: z.number().min(0).optional(),
+  expiryDate: z.string().optional(),
+  status: z.enum(["available", "low_stock", "out_of_stock"]).default("available"),
+});
+
+export const updateKitchenInventorySchema = insertKitchenInventorySchema.partial().omit({ branchId: true });
+
+export const createKitchenOrderSchema = z.object({
+  tableOrRoom: z.string().optional(),
+  customerName: z.string().optional(),
+  source: z.enum(["restaurant", "bar", "room_service", "reception"]).default("restaurant"),
+  staffName: z.string().min(1),
+  priority: z.enum(["normal", "urgent", "vip"]).default("normal"),
+  specialInstructions: z.string().optional(),
+  items: z.array(z.object({
+    mealName: z.string().min(1),
+    quantity: z.number().int().min(1),
+    notes: z.string().optional(),
+  })).min(1),
+});
+
 export const insertBarDrinkSchema = z.object({
   branchId: z.string().uuid(),
   name: z.string().min(1),
@@ -336,7 +443,7 @@ export const createReceptionistSchema = z.object({
   password: z.string().min(6),
   fullName: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant"]).default("receptionist"),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef"]).default("receptionist"),
   avatarUrl: z.string().optional(),
   // Required for receptionist/supervisor/bar_attendant; admins are branch-agnostic. Enforced in the route handler
   // since the requirement depends on the chosen role, not on the field alone.
@@ -357,7 +464,7 @@ export const updateHotelSettingsSchema = z.object({
 export const updateReceptionistSchema = z.object({
   fullName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant"]).optional(),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef"]).optional(),
   avatarUrl: z.string().optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),
@@ -384,3 +491,8 @@ export type CreatePayment = z.infer<typeof createPaymentSchema>;
 export type CreateReceptionist = z.infer<typeof createReceptionistSchema>;
 export type UpdateReceptionist = z.infer<typeof updateReceptionistSchema>;
 export type UpdateHotelSettings = z.infer<typeof updateHotelSettingsSchema>;
+export type KitchenInventoryItem = typeof kitchenInventory.$inferSelect;
+export type KitchenStockMovement = typeof kitchenStockMovements.$inferSelect;
+export type KitchenShift = typeof kitchenShifts.$inferSelect;
+export type KitchenOrder = typeof kitchenOrders.$inferSelect;
+export type KitchenOrderItem = typeof kitchenOrderItems.$inferSelect;

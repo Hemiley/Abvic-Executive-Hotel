@@ -209,6 +209,47 @@ export type BarReport = {
   sales: (BarSale & { items: BarSaleItem[] })[];
 };
 
+export type KitchenInventoryItem = {
+  id: string; branchId: string; name: string; category: string; unit: string;
+  pricePerUnit: string; openingStock: string; stockReceived: string;
+  currentStock: string; minimumStock: string; supplier?: string | null;
+  purchaseCost?: string | null; expiryDate?: string | null;
+  status: string; lastUpdated: string; createdAt: string;
+};
+
+export type KitchenShift = {
+  id: string; chefId: string; chefName: string; branchId: string;
+  status: string; startTime: string; endTime?: string | null;
+  notes?: string | null; ordersCompleted: number; mealsCooked: number;
+  openingStockSnapshot?: any; closingStockSnapshot?: any;
+};
+
+export type KitchenOrderItem = {
+  id: string; orderId: string; mealName: string; quantity: number; notes?: string | null;
+};
+
+export type KitchenOrder = {
+  id: string; orderNumber: string; branchId: string; tableOrRoom?: string | null;
+  customerName?: string | null; source: string; staffId?: string | null;
+  staffName: string; status: string; priority: string;
+  specialInstructions?: string | null; estimatedMinutes?: number | null;
+  shiftId?: string | null; createdAt: string; updatedAt: string;
+};
+
+export type KitchenDashboard = {
+  newOrders: number; preparingOrders: number; readyOrders: number;
+  completedToday: number; cancelledToday: number; staffOnDuty: number;
+  lowStockItems: number; outOfStockItems: number; lowStockAlerts: KitchenInventoryItem[];
+};
+
+export type KitchenReportData = {
+  totalOrders: number; completedOrders: number; cancelledOrders: number;
+  totalMeals: number; totalShifts: number;
+  topMeals: { mealName: string; count: number }[];
+  stockUsage: { itemName: string; unit: string; totalUsed: number }[];
+  shifts: KitchenShift[];
+};
+
 export type DashboardSummary = {
   shiftActive: boolean;
   shift: Shift | null;
@@ -366,6 +407,26 @@ export const api = {
     const qs = params.toString();
     return request<BarReport>(`/api/bar/reports${qs ? `?${qs}` : ""}`);
   },
+
+  // Kitchen Management
+  getKitchenInventory: (branchId?: string) => request<KitchenInventoryItem[]>(`/api/kitchen/inventory${branchId ? `?branchId=${branchId}` : ""}`),
+  createKitchenInventoryItem: (data: any) => request<KitchenInventoryItem>("/api/kitchen/inventory", { method: "POST", body: JSON.stringify(data) }),
+  updateKitchenInventoryItem: (id: string, data: any) => request<KitchenInventoryItem>(`/api/kitchen/inventory/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  recordKitchenStockMovement: (data: { itemId: string; type: string; quantity: number; note?: string }) =>
+    request<{ ok: boolean }>("/api/kitchen/stock-movements", { method: "POST", body: JSON.stringify(data) }),
+
+  getActiveKitchenShift: () => request<KitchenShift | null>("/api/kitchen/shifts/active"),
+  startKitchenShift: () => request<KitchenShift>("/api/kitchen/shifts/start", { method: "POST", body: JSON.stringify({}) }),
+  closeKitchenShift: (id: string, notes?: string) => request<KitchenShift>(`/api/kitchen/shifts/${id}/close`, { method: "POST", body: JSON.stringify({ notes }) }),
+  getKitchenShifts: () => request<KitchenShift[]>("/api/kitchen/shifts"),
+
+  getKitchenOrders: (status?: string) => request<(KitchenOrder & { items: KitchenOrderItem[] })[]>(`/api/kitchen/orders${status ? `?status=${status}` : ""}`),
+  createKitchenOrder: (data: any) => request<KitchenOrder & { items: KitchenOrderItem[] }>("/api/kitchen/orders", { method: "POST", body: JSON.stringify(data) }),
+  updateKitchenOrderStatus: (id: string, status: string, estimatedMinutes?: number) =>
+    request<KitchenOrder>(`/api/kitchen/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, estimatedMinutes }) }),
+
+  getKitchenDashboard: () => request<KitchenDashboard>("/api/kitchen/dashboard"),
+  getKitchenReports: (from: string, to: string) => request<KitchenReportData>(`/api/kitchen/reports?from=${from}&to=${to}`),
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),

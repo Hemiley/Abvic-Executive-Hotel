@@ -4,6 +4,7 @@ import { SettingsProvider } from "./context/SettingsContext";
 import { NotificationsProvider } from "./context/NotificationsContext";
 import Layout from "./components/Layout";
 import BarLayout from "./pages/bar/BarLayout";
+import KitchenLayout from "./pages/kitchen/KitchenLayout";
 import Login from "./pages/Login";
 import AdminLogin from "./pages/AdminLogin";
 import Dashboard from "./pages/Dashboard";
@@ -22,14 +23,20 @@ import BarSales from "./pages/bar/BarSales";
 import BarReports from "./pages/bar/BarReports";
 import BarWaiters from "./pages/bar/BarWaiters";
 import BarShiftHistory from "./pages/bar/BarShiftHistory";
+import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
+import KitchenOrders from "./pages/kitchen/KitchenOrders";
+import KitchenInventory from "./pages/kitchen/KitchenInventory";
+import KitchenShifts from "./pages/kitchen/KitchenShifts";
+import KitchenReports from "./pages/kitchen/KitchenReports";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/abvichoteldashboard" replace />;
-  // Bar attendants should not access hotel routes
+  // Portal-only roles should not access hotel routes
   if (user.role === "bar_attendant") return <Navigate to="/bar" replace />;
+  if (user.role === "chef") return <Navigate to="/kitchen" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -40,6 +47,14 @@ function BarProtectedRoute({ children, adminBar = false }: { children: JSX.Eleme
   if (user.role !== "bar_attendant" && user.role !== "admin" && user.role !== "supervisor") return <Navigate to="/abvichoteldashboard" replace />;
   if (adminBar && user.role !== "admin") return <Navigate to="/bar" replace />;
   return <BarLayout>{children}</BarLayout>;
+}
+
+function KitchenProtectedRoute({ children }: { children: JSX.Element }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading-screen">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!["chef", "admin", "supervisor"].includes(user.role)) return <Navigate to="/abvichoteldashboard" replace />;
+  return <KitchenLayout>{children}</KitchenLayout>;
 }
 
 function AppRoutes() {
@@ -68,6 +83,13 @@ function AppRoutes() {
       <Route path="/bar/waiters" element={<BarProtectedRoute><BarWaiters /></BarProtectedRoute>} />
       <Route path="/bar/reports" element={<BarProtectedRoute><BarReports /></BarProtectedRoute>} />
       <Route path="/bar/shifts" element={<BarProtectedRoute><BarShiftHistory /></BarProtectedRoute>} />
+
+      {/* Kitchen routes */}
+      <Route path="/kitchen" element={<KitchenProtectedRoute><KitchenDashboard /></KitchenProtectedRoute>} />
+      <Route path="/kitchen/orders" element={<KitchenProtectedRoute><KitchenOrders /></KitchenProtectedRoute>} />
+      <Route path="/kitchen/inventory" element={<KitchenProtectedRoute><KitchenInventory /></KitchenProtectedRoute>} />
+      <Route path="/kitchen/shifts" element={<KitchenProtectedRoute><KitchenShifts /></KitchenProtectedRoute>} />
+      <Route path="/kitchen/reports" element={<KitchenProtectedRoute><KitchenReports /></KitchenProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/abvichoteldashboard" replace />} />
     </Routes>

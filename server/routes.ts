@@ -21,6 +21,9 @@ import {
   updateBarDrinkSchema,
   insertBarWaiterSchema,
   createBarSaleSchema,
+  insertKitchenInventorySchema,
+  updateKitchenInventorySchema,
+  createKitchenOrderSchema,
 } from "@shared/schema";
 
 declare module "express-session" {
@@ -1193,5 +1196,137 @@ export function registerRoutes(app: Express) {
       topSelling, salesByWaiter, lowStockDrinks,
       sales: enriched,
     });
+  });
+
+  // ── Kitchen Management ────────────────────────────────────────────────────────
+
+  function requireKitchenAccess(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
+    storage.getReceptionistById(req.session.receptionistId).then((user) => {
+      if (!user || !user.active) { req.session.destroy(() => {}); return res.status(401).json({ message: "Session invalid" }); }
+      if (!["chef", "admin", "supervisor"].includes(user.role)) return res.status(403).json({ message: "Kitchen access required" });
+      next();
+    }).catch(next);
+  }
+
+  // Kitchen Inventory
+  app.get("/api/kitchen/inventory", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin"
+      ? (typeof req.query.branchId === "string" && req.query.branchId ? req.query.branchId : undefined)
+      : scopeBranchId(req);
+    res.json(await storage.getKitchenInventory(branchId));
+  });
+
+  app.post("/api/kitchen/inventory", requireKitchenAccess, async (req, res) => {
+    const body = { ...req.body };
+    if (req.session.role !== "admin") body.branchId = req.session.branchId;
+    const parsed = insertKitchenInventorySchema.safeParse(body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const item = await storage.createKitchenInventoryItem(parsed.data as any);
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_item_created", details: `${item.name} added to kitchen inventory` });
+    res.status(201).json(item);
+  });
+
+  app.patch("/api/kitchen/inventory/:id", requireKitchenAccess, async (req, res) => {
+    const parsed = updateKitchenInventorySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const updated = await storage.updateKitchenInventoryItem(req.params.id, parsed.data as any);
+    if (!updated) return res.status(404).json({ message: "Item not found" });
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_item_updated", details: `${updated.name} updated` });
+    res.json(updated);
+  });
+
+  // Kitchen Stock Movements
+  app.post("/api/kitchen/stock-movements", requireKitchenAccess, async (req, res) => {
+    const { itemId, type, quantity, note } = req.body;
+    if (!itemId || !type || !quantity) return res.status(400).json({ message: "itemId, type, and quantity required" });
+    await storage.recordKitchenStockMovement({
+      itemId, type, quantity: Number(quantity), note,
+      staffId: req.session.receptionistId,
+      staffName: req.session.receptionistName,
+    });
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_stock_movement", details: `Stock ${type}: ${quantity} units for item ${itemId}` });
+    res.json({ ok: true });
+  });
+
+  app.get("/api/kitchen/stock-movements", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+    res.json(await storage.getKitchenStockMovements(branchId, itemId));
+  });
+
+  // Kitchen Shifts
+  app.get("/api/kitchen/shifts/active", requireKitchenAccess, async (req, res) => {
+    const shift = await storage.getActiveKitchenShift(req.session.receptionistId);
+    res.json(shift ?? null);
+  });
+
+  app.post("/api/kitchen/shifts/start", requireKitchenAccess, async (req, res) => {
+    if (!req.session.receptionistId || !req.session.receptionistName || !req.session.branchId) {
+      return res.status(400).json({ message: "Session missing required fields" });
+    }
+    try {
+      const shift = await storage.startKitchenShift(req.session.receptionistId, req.session.receptionistName, req.session.branchId);
+      await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_shift_started", details: "Kitchen shift started" });
+      res.status(201).json(shift);
+    } catch (e: any) {
+      res.status(400).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/kitchen/shifts/:id/close", requireKitchenAccess, async (req, res) => {
+    const { notes } = req.body;
+    const shift = await storage.closeKitchenShift(req.params.id, notes);
+    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_shift_closed", details: "Kitchen shift closed" });
+    res.json(shift);
+  });
+
+  app.get("/api/kitchen/shifts", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    res.json(await storage.getKitchenShifts(branchId));
+  });
+
+  // Kitchen Orders
+  app.get("/api/kitchen/orders", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    res.json(await storage.getKitchenOrders(branchId, status));
+  });
+
+  app.post("/api/kitchen/orders", requireAuth, async (req, res) => {
+    const parsed = createKitchenOrderSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const branchId = req.session.branchId || req.body.branchId;
+    if (!branchId) return res.status(400).json({ message: "Branch required" });
+    const activeShift = await storage.getActiveKitchenShift();
+    const order = await storage.createKitchenOrder({
+      ...parsed.data,
+      branchId,
+      staffId: req.session.receptionistId,
+      shiftId: activeShift?.id,
+    });
+    res.status(201).json(order);
+  });
+
+  app.patch("/api/kitchen/orders/:id/status", requireKitchenAccess, async (req, res) => {
+    const { status, estimatedMinutes } = req.body;
+    if (!status) return res.status(400).json({ message: "status required" });
+    const updated = await storage.updateKitchenOrderStatus(req.params.id, status, estimatedMinutes);
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+    res.json(updated);
+  });
+
+  // Kitchen Dashboard
+  app.get("/api/kitchen/dashboard", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    res.json(await storage.getKitchenDashboard(branchId));
+  });
+
+  // Kitchen Reports
+  app.get("/api/kitchen/reports", requireKitchenAccess, async (req, res) => {
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+    res.json(await storage.getKitchenReports(branchId, from, to));
   });
 }

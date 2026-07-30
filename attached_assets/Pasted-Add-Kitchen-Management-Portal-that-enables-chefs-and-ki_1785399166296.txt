@@ -1,0 +1,186 @@
+Add Kitchen Management Portal that enables chefs and kitchen staff to efficiently manage kitchen operations, inventory, food preparation, and order fulfillment. The system should be secure, and support multiple shifts.
+
+Authentication & Shift Management
+
+* Secure login for Chef
+* Role-based access control.
+* Allow chefs to **Start Shift** and **End Shift**.
+* Record:
+
+  * Staff name
+  * Login time
+  * Logout time
+  * Shift duration
+  * Opening stock
+  * Closing stock
+  * Shift notes
+* Prevent new staff from starting a shift until the previous shift has been properly closed or handed over.
+
+Kitchen Inventory Management
+
+Allow chefs and the super admin to record, monitor, and manage all kitchen inventory, including but not limited to:
+
+* Chicken
+* Turkey
+* Fish
+* Beef
+* Goat meat
+* Pork (optional)
+* Shrimp
+* Rice
+* Vegetables
+* Cooking oil
+* Seasonings
+* Drinks used in the kitchen
+* Frozen foods
+* Other ingredients
+
+Each inventory item should include:
+
+* Item Name
+* Category
+* Unit of Measurement (kg, liters, cartons, pieces, packs, etc.)
+* Price per items
+* Opening Stock
+* New Stock Received
+* Current Stock
+* Minimum Stock Level
+* Supplier
+* Purchase Cost
+* Expiry Date (where applicable)
+* Last Updated Date
+* Status (Available, Low Stock, Out of Stock)
+
+Stock Control and prices
+allow super admin to:
+* Add new stock
+* Add new price and update existing prices
+* Update existing stock
+* Deduct stock automatically when meals are prepared
+* Track stock movement history
+* Notify when stock reaches minimum quantity
+* Display low-stock alerts on the dashboard
+
+Kitchen Order Management
+
+The kitchen should receive food orders in real time from:
+
+* Waiters
+* Waitresses
+* Receptionists
+* Bar staff (Barman/Bar Lady) for food requests
+
+Each order should display:
+
+* Order Number
+* Table Number or Room Number
+* Customer Name (optional)
+* Order Source (Restaurant, Bar, Room Service, Reception)
+* Staff Name who placed the order
+* Food Items Ordered
+* Quantity
+* Special Instructions
+* Time Order Was Placed
+* Priority (Normal, Urgent, VIP)
+
+### Order Workflow
+
+Each order should move through the following statuses:
+
+* New Order
+* Accepted
+* Preparing
+* Ready for Pickup
+* Served
+* Cancelled
+
+Kitchen staff should be able to:
+
+* Accept orders
+* Reject unavailable items
+* Estimate preparation time
+* Mark orders as ready
+* Notify the waiter or receptionist when the order is complete
+
+### Kitchen Dashboard
+
+Display real-time statistics including:
+
+* Active Orders
+* Pending Orders
+* Completed Orders
+* Cancelled Orders
+* Total Meals Prepared Today
+* Current Kitchen Staff on Duty
+* Low Stock Items
+* Out-of-Stock Items
+* Today's Ingredient Usage
+
+### Reports
+
+Generate reports for:
+
+* Daily Kitchen Production
+* Daily Ingredient Usage
+* Weekly and Monthly Stock Consumption
+* Waste Report
+* Spoilage Report
+* Shift Performance
+* Most Ordered Meals
+* Kitchen Revenue Summary (if applicable)
+
+Reports should be exportable as:
+
+* PDF
+* Excel
+* CSV
+
+### Notifications
+
+Real-time notifications for:
+
+* New food orders
+* Low stock alerts
+* Out-of-stock items
+* Shift reminders
+* Delayed orders
+* Completed orders ready for pickup
+
+### Receipt & Kitchen Tickets
+
+Generate printable kitchen order tickets containing:
+
+* Order Number
+* Table/Room Number
+* Ordered Items
+* Quantity
+* Special Instructions
+* Date & Time
+* Staff Name
+
+Support:
+
+* POP Printer Printing
+* PDF Download
+
+### Audit Trail
+
+Record every activity, including:
+
+* Stock added
+* Stock removed
+* Order accepted
+* Order completed
+* Shift started
+* Shift closed
+* Inventory edits
+
+Include:
+
+* User
+* Date
+* Time
+* Action performed
+
+
+All modules should share the same database so inventory, orders, sales, and reports remain synchronized across the entire hotel management system.

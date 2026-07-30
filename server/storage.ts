@@ -15,6 +15,11 @@ import {
   barShifts,
   barSales,
   barSaleItems,
+  kitchenInventory,
+  kitchenStockMovements,
+  kitchenShifts,
+  kitchenOrders,
+  kitchenOrderItems,
   type Branch,
   type InsertBranch,
   type UpdateBranch,
@@ -37,6 +42,11 @@ import {
   type BarShift,
   type BarSale,
   type BarSaleItem,
+  type KitchenInventoryItem,
+  type KitchenStockMovement,
+  type KitchenShift,
+  type KitchenOrder,
+  type KitchenOrderItem,
 } from "@shared/schema";
 import { eq, desc, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -772,5 +782,251 @@ export const storage = {
       .where(eq(hotelSettings.id, existing.id))
       .returning();
     return updated;
+  },
+
+  // ── Kitchen Inventory ────────────────────────────────────────────────────────
+  async getKitchenInventory(branchId?: string): Promise<KitchenInventoryItem[]> {
+    if (branchId) return db.select().from(kitchenInventory).where(eq(kitchenInventory.branchId, branchId)).orderBy(kitchenInventory.name);
+    return db.select().from(kitchenInventory).orderBy(kitchenInventory.name);
+  },
+  async getKitchenInventoryItem(id: string): Promise<KitchenInventoryItem | undefined> {
+    const [i] = await db.select().from(kitchenInventory).where(eq(kitchenInventory.id, id));
+    return i;
+  },
+  async createKitchenInventoryItem(data: {
+    branchId: string; name: string; category: string; unit: string;
+    pricePerUnit: number; openingStock: number; stockReceived: number;
+    minimumStock: number; supplier?: string; purchaseCost?: number;
+    expiryDate?: string; status?: string;
+  }): Promise<KitchenInventoryItem> {
+    const currentStock = (data.openingStock || 0) + (data.stockReceived || 0);
+    const autoStatus = currentStock <= 0 ? "out_of_stock" : currentStock <= (data.minimumStock || 0) ? "low_stock" : "available";
+    const [item] = await db.insert(kitchenInventory).values({
+      ...data,
+      currentStock: String(currentStock),
+      pricePerUnit: String(data.pricePerUnit),
+      openingStock: String(data.openingStock),
+      stockReceived: String(data.stockReceived),
+      minimumStock: String(data.minimumStock),
+      purchaseCost: data.purchaseCost !== undefined ? String(data.purchaseCost) : undefined,
+      status: data.status ?? autoStatus,
+    }).returning();
+    return item;
+  },
+  async updateKitchenInventoryItem(id: string, data: Partial<{
+    name: string; category: string; unit: string; pricePerUnit: number;
+    minimumStock: number; supplier: string; purchaseCost: number;
+    expiryDate: string; status: string;
+  }>): Promise<KitchenInventoryItem | undefined> {
+    const payload: any = { ...data, lastUpdated: new Date() };
+    if (payload.pricePerUnit !== undefined) payload.pricePerUnit = String(payload.pricePerUnit);
+    if (payload.minimumStock !== undefined) payload.minimumStock = String(payload.minimumStock);
+    if (payload.purchaseCost !== undefined) payload.purchaseCost = String(payload.purchaseCost);
+    const [updated] = await db.update(kitchenInventory).set(payload).where(eq(kitchenInventory.id, id)).returning();
+    return updated;
+  },
+
+  // ── Kitchen Stock Movements ──────────────────────────────────────────────────
+  async recordKitchenStockMovement(data: {
+    itemId: string; type: string; quantity: number; note?: string;
+    staffId?: string; staffName?: string;
+  }): Promise<void> {
+    const item = await this.getKitchenInventoryItem(data.itemId);
+    if (!item) throw new Error("Item not found");
+    let newStock = Number(item.currentStock);
+    if (data.type === "received") newStock += data.quantity;
+    else if (data.type === "used" || data.type === "waste") newStock = Math.max(0, newStock - data.quantity);
+    else newStock = data.quantity; // adjustment sets absolute value
+    const autoStatus = newStock <= 0 ? "out_of_stock" : newStock <= Number(item.minimumStock) ? "low_stock" : "available";
+    await db.update(kitchenInventory).set({
+      currentStock: String(newStock),
+      stockReceived: data.type === "received" ? String(Number(item.stockReceived) + data.quantity) : item.stockReceived,
+      status: autoStatus,
+      lastUpdated: new Date(),
+    }).where(eq(kitchenInventory.id, data.itemId));
+    await db.insert(kitchenStockMovements).values({
+      itemId: data.itemId,
+      itemName: item.name,
+      branchId: item.branchId,
+      type: data.type,
+      quantity: String(data.quantity),
+      note: data.note,
+      staffId: data.staffId,
+      staffName: data.staffName,
+    });
+  },
+  async getKitchenStockMovements(branchId?: string, itemId?: string): Promise<KitchenStockMovement[]> {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(kitchenStockMovements.branchId, branchId));
+    if (itemId) conditions.push(eq(kitchenStockMovements.itemId, itemId));
+    const q = db.select().from(kitchenStockMovements);
+    return conditions.length ? q.where(and(...conditions)).orderBy(desc(kitchenStockMovements.createdAt)) : q.orderBy(desc(kitchenStockMovements.createdAt));
+  },
+
+  // ── Kitchen Shifts ───────────────────────────────────────────────────────────
+  async getActiveKitchenShift(chefId?: string): Promise<KitchenShift | undefined> {
+    const conditions: any[] = [eq(kitchenShifts.status, "active")];
+    if (chefId) conditions.push(eq(kitchenShifts.chefId, chefId));
+    const [shift] = await db.select().from(kitchenShifts).where(and(...conditions)).limit(1);
+    return shift;
+  },
+  async startKitchenShift(chefId: string, chefName: string, branchId: string): Promise<KitchenShift> {
+    const existing = await this.getActiveKitchenShift(chefId);
+    if (existing) throw new Error("You already have an active shift. Close it before starting a new one.");
+    const [shift] = await db.insert(kitchenShifts).values({ chefId, chefName, branchId }).returning();
+    return shift;
+  },
+  async closeKitchenShift(shiftId: string, notes?: string): Promise<KitchenShift> {
+    const [updated] = await db.update(kitchenShifts).set({
+      status: "closed",
+      endTime: new Date(),
+      notes,
+    }).where(eq(kitchenShifts.id, shiftId)).returning();
+    return updated;
+  },
+  async getKitchenShifts(branchId?: string): Promise<KitchenShift[]> {
+    if (branchId) return db.select().from(kitchenShifts).where(eq(kitchenShifts.branchId, branchId)).orderBy(desc(kitchenShifts.startTime));
+    return db.select().from(kitchenShifts).orderBy(desc(kitchenShifts.startTime));
+  },
+  async incrementShiftOrders(shiftId: string): Promise<void> {
+    await db.update(kitchenShifts).set({
+      ordersCompleted: sql`${kitchenShifts.ordersCompleted} + 1`,
+    }).where(eq(kitchenShifts.id, shiftId));
+  },
+
+  // ── Kitchen Orders ───────────────────────────────────────────────────────────
+  async getKitchenOrders(branchId?: string, status?: string): Promise<(KitchenOrder & { items: KitchenOrderItem[] })[]> {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(kitchenOrders.branchId, branchId));
+    if (status) conditions.push(eq(kitchenOrders.status, status));
+    const q = db.select().from(kitchenOrders);
+    const orders = conditions.length
+      ? await q.where(and(...conditions)).orderBy(desc(kitchenOrders.createdAt))
+      : await q.orderBy(desc(kitchenOrders.createdAt));
+    const items = await db.select().from(kitchenOrderItems);
+    return orders.map(o => ({ ...o, items: items.filter(i => i.orderId === o.id) }));
+  },
+  async createKitchenOrder(data: {
+    branchId: string; tableOrRoom?: string; customerName?: string;
+    source: string; staffId?: string; staffName: string;
+    priority: string; specialInstructions?: string; shiftId?: string;
+    items: { mealName: string; quantity: number; notes?: string }[];
+  }): Promise<KitchenOrder & { items: KitchenOrderItem[] }> {
+    const orderNumber = `KIT-${Date.now().toString().slice(-6)}`;
+    const [order] = await db.insert(kitchenOrders).values({
+      orderNumber,
+      branchId: data.branchId,
+      tableOrRoom: data.tableOrRoom,
+      customerName: data.customerName,
+      source: data.source,
+      staffId: data.staffId,
+      staffName: data.staffName,
+      priority: data.priority,
+      specialInstructions: data.specialInstructions,
+      shiftId: data.shiftId,
+    }).returning();
+    const insertedItems: KitchenOrderItem[] = [];
+    for (const item of data.items) {
+      const [i] = await db.insert(kitchenOrderItems).values({ orderId: order.id, ...item }).returning();
+      insertedItems.push(i);
+    }
+    return { ...order, items: insertedItems };
+  },
+  async updateKitchenOrderStatus(id: string, status: string, estimatedMinutes?: number): Promise<KitchenOrder | undefined> {
+    const payload: any = { status, updatedAt: new Date() };
+    if (estimatedMinutes !== undefined) payload.estimatedMinutes = estimatedMinutes;
+    if (status === "served") {
+      const [order] = await db.select().from(kitchenOrders).where(eq(kitchenOrders.id, id));
+      if (order?.shiftId) await this.incrementShiftOrders(order.shiftId);
+    }
+    const [updated] = await db.update(kitchenOrders).set(payload).where(eq(kitchenOrders.id, id)).returning();
+    return updated;
+  },
+
+  // ── Kitchen Dashboard ────────────────────────────────────────────────────────
+  async getKitchenDashboard(branchId?: string): Promise<{
+    newOrders: number; preparingOrders: number; readyOrders: number;
+    completedToday: number; cancelledToday: number; staffOnDuty: number;
+    lowStockItems: number; outOfStockItems: number; lowStockAlerts: KitchenInventoryItem[];
+  }> {
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const allOrders = branchId
+      ? await db.select().from(kitchenOrders).where(eq(kitchenOrders.branchId, branchId))
+      : await db.select().from(kitchenOrders);
+    const allInventory = branchId
+      ? await db.select().from(kitchenInventory).where(eq(kitchenInventory.branchId, branchId))
+      : await db.select().from(kitchenInventory);
+    const activeShifts = branchId
+      ? await db.select().from(kitchenShifts).where(and(eq(kitchenShifts.status, "active"), eq(kitchenShifts.branchId, branchId)))
+      : await db.select().from(kitchenShifts).where(eq(kitchenShifts.status, "active"));
+    const todayOrders = allOrders.filter(o => new Date(o.createdAt) >= todayStart);
+    const lowStock = allInventory.filter(i => i.status === "low_stock");
+    const outOfStock = allInventory.filter(i => i.status === "out_of_stock");
+    return {
+      newOrders: allOrders.filter(o => o.status === "new").length,
+      preparingOrders: allOrders.filter(o => o.status === "preparing" || o.status === "accepted").length,
+      readyOrders: allOrders.filter(o => o.status === "ready").length,
+      completedToday: todayOrders.filter(o => o.status === "served").length,
+      cancelledToday: todayOrders.filter(o => o.status === "cancelled").length,
+      staffOnDuty: activeShifts.length,
+      lowStockItems: lowStock.length,
+      outOfStockItems: outOfStock.length,
+      lowStockAlerts: [...lowStock, ...outOfStock].slice(0, 10),
+    };
+  },
+
+  // ── Kitchen Reports ──────────────────────────────────────────────────────────
+  async getKitchenReports(branchId?: string, from?: Date, to?: Date): Promise<{
+    totalOrders: number; completedOrders: number; cancelledOrders: number;
+    totalMeals: number; totalShifts: number;
+    topMeals: { mealName: string; count: number }[];
+    stockUsage: { itemName: string; unit: string; totalUsed: number }[];
+    shifts: KitchenShift[];
+  }> {
+    const conditions: any[] = [];
+    if (branchId) conditions.push(eq(kitchenOrders.branchId, branchId));
+    if (from) conditions.push(gte(kitchenOrders.createdAt, from));
+    if (to) { const toEnd = new Date(to); toEnd.setHours(23, 59, 59, 999); conditions.push(lte(kitchenOrders.createdAt, toEnd)); }
+    const orders = conditions.length
+      ? await db.select().from(kitchenOrders).where(and(...conditions))
+      : await db.select().from(kitchenOrders);
+    const orderIds = orders.map(o => o.id);
+    const allItems = orderIds.length ? await db.select().from(kitchenOrderItems).where(inArray(kitchenOrderItems.orderId, orderIds)) : [];
+    // Stock movements for the period
+    const smCond: any[] = [eq(kitchenStockMovements.type, "used")];
+    if (branchId) smCond.push(eq(kitchenStockMovements.branchId, branchId));
+    if (from) smCond.push(gte(kitchenStockMovements.createdAt, from));
+    if (to) { const toEnd = new Date(to); toEnd.setHours(23, 59, 59, 999); smCond.push(lte(kitchenStockMovements.createdAt, toEnd)); }
+    const movements = await db.select().from(kitchenStockMovements).where(and(...smCond));
+    // Aggregate top meals
+    const mealCounts: Record<string, number> = {};
+    allItems.forEach(i => { mealCounts[i.mealName] = (mealCounts[i.mealName] || 0) + i.quantity; });
+    const topMeals = Object.entries(mealCounts).map(([mealName, count]) => ({ mealName, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    // Aggregate stock usage
+    const usageMap: Record<string, { itemName: string; unit: string; total: number }> = {};
+    for (const m of movements) {
+      if (!usageMap[m.itemName]) {
+        const item = await this.getKitchenInventoryItem(m.itemId);
+        usageMap[m.itemName] = { itemName: m.itemName, unit: item?.unit || "", total: 0 };
+      }
+      usageMap[m.itemName].total += Number(m.quantity);
+    }
+    const stockUsage = Object.values(usageMap).map(u => ({ itemName: u.itemName, unit: u.unit, totalUsed: u.total }));
+    // Shifts
+    const shiftCond: any[] = [];
+    if (branchId) shiftCond.push(eq(kitchenShifts.branchId, branchId));
+    if (from) shiftCond.push(gte(kitchenShifts.startTime, from));
+    if (to) { const toEnd = new Date(to); toEnd.setHours(23, 59, 59, 999); shiftCond.push(lte(kitchenShifts.startTime, toEnd)); }
+    const shifts = shiftCond.length ? await db.select().from(kitchenShifts).where(and(...shiftCond)).orderBy(desc(kitchenShifts.startTime)) : await db.select().from(kitchenShifts).orderBy(desc(kitchenShifts.startTime));
+    return {
+      totalOrders: orders.length,
+      completedOrders: orders.filter(o => o.status === "served").length,
+      cancelledOrders: orders.filter(o => o.status === "cancelled").length,
+      totalMeals: allItems.reduce((s, i) => s + i.quantity, 0),
+      totalShifts: shifts.length,
+      topMeals,
+      stockUsage,
+      shifts,
+    };
   },
 };
