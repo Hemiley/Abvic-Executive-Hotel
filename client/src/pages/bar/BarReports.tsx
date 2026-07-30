@@ -202,6 +202,19 @@ export default function BarReports() {
     const served = foodOrders.filter(o => o.status === "served").length;
     const cancelled = foodOrders.filter(o => o.status === "cancelled").length;
     const grandTotal = foodOrders.reduce((s, o) => s + foodOrderTotal(o.items ?? []), 0);
+    // Build per-staff breakdown
+    const staffMap = new Map<string, { orders: number; total: number }>();
+    for (const o of foodOrders) {
+      const name = o.staffName || "Unknown";
+      const entry = staffMap.get(name) ?? { orders: 0, total: 0 };
+      entry.orders += 1;
+      entry.total += foodOrderTotal(o.items ?? []);
+      staffMap.set(name, entry);
+    }
+    const staffRows: (string | number)[][] = Array.from(staffMap.entries())
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([name, v]) => [name, v.orders, v.total]);
+
     const summaryData = [
       [hotelName],
       ["Bar Food Sales Report", range.label],
@@ -213,6 +226,10 @@ export default function BarReports() {
       ["Cancelled", cancelled],
       ["Active / Pending", foodOrders.length - served - cancelled],
       ["Grand Total (₦)", grandTotal],
+      [],
+      ["Staff / Waiter Breakdown"],
+      ["Name", "Orders", "Amount (₦)"],
+      ...staffRows,
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
     ws1["!cols"] = [{ wch: 28 }, { wch: 20 }];
