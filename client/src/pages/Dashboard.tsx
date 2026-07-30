@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
-import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings } from "../lib/api";
+import { api, type DashboardSummary, type Shift, type Payment, type Reservation, type Guest, type Room, type HotelSettings, type KitchenOrder, type KitchenOrderItem } from "../lib/api";
 
 // ── HTML escape helper — prevents XSS from user-controlled data in report ─────
 function esc(value: string | number | null | undefined): string {
@@ -209,6 +209,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [downloadingFoodSales, setDownloadingFoodSales] = useState(false);
 
   function load() {
     api.getDashboardSummary().then(setSummary).catch(() => {});
@@ -378,6 +379,57 @@ export default function Dashboard() {
     // ── Trigger download ──────────────────────────────────────────────────────
     const filename = `shift-report-${safeName(shift.receptionistName)}-${date}.xlsx`;
     XLSX.writeFile(wb, filename);
+  }
+
+  async function handleDownloadFoodSales() {
+    if (!reportData) return;
+    const { shift, settings } = reportData;
+    if (!shift.logoutTime) return;
+    setDownloadingFoodSales(true);
+    try {
+      const orders = await api.getFoodSalesByDateRange(
+        "reception",
+        new Date(shift.loginTime).toISOString(),
+        new Date(shift.logoutTime).toISOString(),
+      );
+      const safeName = (s: string) => s.replace(/[/\\:*?"<>|]/g, "-").replace(/\s+/g, "-");
+      const date = new Date(shift.loginTime).toISOString().slice(0, 10);
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Orders
+      const orderHeaders = ["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"];
+      const orderRows = orders.map((o: KitchenOrder & { items: KitchenOrderItem[] }) => [
+        o.orderNumber,
+        o.customerName ?? "",
+        o.tableOrRoom ?? "",
+        o.staffName,
+        o.priority,
+        o.status,
+        o.items?.length ?? 0,
+        new Date(o.createdAt).toLocaleString("en-NG"),
+      ]);
+      const wsOrders = XLSX.utils.aoa_to_sheet([orderHeaders, ...orderRows]);
+      wsOrders["!cols"] = orderHeaders.map(() => ({ wch: 18 }));
+      XLSX.utils.book_append_sheet(wb, wsOrders, "Food Orders");
+
+      // Sheet 2: Items detail
+      const itemHeaders = ["Order #", "Meal", "Qty", "Notes"];
+      const itemRows: (string | number)[][] = [];
+      for (const o of orders as (KitchenOrder & { items: KitchenOrderItem[] })[]) {
+        for (const it of o.items ?? []) {
+          itemRows.push([o.orderNumber, it.mealName, it.quantity, it.notes ?? ""]);
+        }
+      }
+      const wsItems = XLSX.utils.aoa_to_sheet([itemHeaders, ...itemRows]);
+      wsItems["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsItems, "Items Detail");
+
+      XLSX.writeFile(wb, `food-sales-reception-${safeName(shift.receptionistName)}-${date}.xlsx`);
+    } catch (e: any) {
+      alert("Could not download food sales: " + e.message);
+    } finally {
+      setDownloadingFoodSales(false);
+    }
   }
 
   const cards = summary
@@ -583,6 +635,15 @@ export default function Dashboard() {
               </button>
               <button className="btn secondary" style={{ flex: 1 }} onClick={handleDownloadExcel}>
                 📊 Download Excel
+              </button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <button
+                className="btn secondary full"
+                onClick={handleDownloadFoodSales}
+                disabled={downloadingFoodSales}
+              >
+                {downloadingFoodSales ? "Preparing…" : "🍽️ Download Food Sales"}
               </button>
             </div>
 

@@ -422,6 +422,8 @@ export const api = {
   getKitchenShifts: () => request<KitchenShift[]>("/api/kitchen/shifts"),
 
   getKitchenOrders: (status?: string) => request<(KitchenOrder & { items: KitchenOrderItem[] })[]>(`/api/kitchen/orders${status ? `?status=${status}` : ""}`),
+  getFoodSalesByDateRange: (source: "reception" | "bar", from: string, to: string) =>
+    request<(KitchenOrder & { items: KitchenOrderItem[] })[]>(`/api/kitchen/orders/food-sales?source=${encodeURIComponent(source)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   createKitchenOrder: (data: any) => request<KitchenOrder & { items: KitchenOrderItem[] }>("/api/kitchen/orders", { method: "POST", body: JSON.stringify(data) }),
   updateKitchenOrderStatus: (id: string, status: string, estimatedMinutes?: number) =>
     request<KitchenOrder>(`/api/kitchen/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, estimatedMinutes }) }),

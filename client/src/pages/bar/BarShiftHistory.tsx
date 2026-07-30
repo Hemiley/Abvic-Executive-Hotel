@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type BarShift } from "../../lib/api";
+import * as XLSX from "xlsx";
+import { api, type BarShift, type KitchenOrder, type KitchenOrderItem } from "../../lib/api";
 import { useSettings } from "../../context/SettingsContext";
 
 function esc(v: string | number | null | undefined) {
@@ -53,10 +54,83 @@ export default function BarShiftHistory() {
   const [shifts, setShifts] = useState<BarShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     api.getBarShifts().then(setShifts).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function downloadFoodSales(shift: BarShift) {
+    if (!shift.closeTime) return;
+    setDownloadingId(shift.id);
+    try {
+      const orders = await api.getFoodSalesByDateRange(
+        "bar",
+        new Date(shift.openTime).toISOString(),
+        new Date(shift.closeTime).toISOString(),
+      );
+      const hotelName = settings?.hotelName || "AEH";
+      const date = new Date(shift.openTime).toISOString().slice(0, 10);
+      const safeName = (s: string) => s.replace(/[/\\:*?"<>|]/g, "-").replace(/\s+/g, "-");
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary
+      const totalOrders = orders.length;
+      const servedOrders = orders.filter((o: KitchenOrder) => o.status === "served").length;
+      const cancelledOrders = orders.filter((o: KitchenOrder) => o.status === "cancelled").length;
+      const summaryData = [
+        [hotelName],
+        ["Bar Food Sales — Shift Summary"],
+        [],
+        ["Attendant", shift.barAttendantName],
+        ["Shift Start", new Date(shift.openTime).toLocaleString("en-NG")],
+        ["Shift End", new Date(shift.closeTime).toLocaleString("en-NG")],
+        ["Report Date", new Date().toLocaleString("en-NG")],
+        [],
+        ["Total Food Orders", totalOrders],
+        ["Served", servedOrders],
+        ["Cancelled", cancelledOrders],
+        ["Other", totalOrders - servedOrders - cancelledOrders],
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      wsSummary["!cols"] = [{ wch: 24 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+      // Sheet 2: Orders
+      const orderHeaders = ["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"];
+      const orderRows = (orders as (KitchenOrder & { items: KitchenOrderItem[] })[]).map(o => [
+        o.orderNumber,
+        o.customerName ?? "",
+        o.tableOrRoom ?? "",
+        o.staffName,
+        o.priority,
+        o.status,
+        o.items?.length ?? 0,
+        new Date(o.createdAt).toLocaleString("en-NG"),
+      ]);
+      const wsOrders = XLSX.utils.aoa_to_sheet([orderHeaders, ...orderRows]);
+      wsOrders["!cols"] = orderHeaders.map(() => ({ wch: 18 }));
+      XLSX.utils.book_append_sheet(wb, wsOrders, "Food Orders");
+
+      // Sheet 3: Items detail
+      const itemHeaders = ["Order #", "Meal", "Qty", "Notes"];
+      const itemRows: (string | number)[][] = [];
+      for (const o of orders as (KitchenOrder & { items: KitchenOrderItem[] })[]) {
+        for (const it of o.items ?? []) {
+          itemRows.push([o.orderNumber, it.mealName, it.quantity, it.notes ?? ""]);
+        }
+      }
+      const wsItems = XLSX.utils.aoa_to_sheet([itemHeaders, ...itemRows]);
+      wsItems["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsItems, "Items Detail");
+
+      XLSX.writeFile(wb, `food-sales-bar-${safeName(shift.barAttendantName)}-${date}.xlsx`);
+    } catch (e: any) {
+      alert("Could not download food sales: " + e.message);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   function printShift(shift: BarShift) {
     const html = generateShiftReportHtml(shift, settings?.hotelName || "AEH");
@@ -118,7 +192,16 @@ export default function BarShiftHistory() {
                   ))}
                 </div>
                 {s.status === "closed" && (
-                  <button className="btn secondary" style={{ marginTop: 4 }} onClick={() => printShift(s)}>🖨️ Print Shift Report</button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+                    <button className="btn secondary" onClick={() => printShift(s)}>🖨️ Print Shift Report</button>
+                    <button
+                      className="btn secondary"
+                      disabled={downloadingId === s.id}
+                      onClick={() => downloadFoodSales(s)}
+                    >
+                      {downloadingId === s.id ? "Preparing…" : "🍽️ Download Food Sales"}
+                    </button>
+                  </div>
                 )}
               </div>
             )}

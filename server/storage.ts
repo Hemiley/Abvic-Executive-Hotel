@@ -932,6 +932,25 @@ export const storage = {
     }
     return { ...order, items: insertedItems };
   },
+  async getKitchenOrdersBySourceAndRange(
+    source: string,
+    from: Date,
+    to: Date,
+    branchId?: string,
+  ): Promise<(KitchenOrder & { items: KitchenOrderItem[] })[]> {
+    const conditions: any[] = [
+      eq(kitchenOrders.source, source),
+      gte(kitchenOrders.createdAt, from),
+      lte(kitchenOrders.createdAt, to),
+    ];
+    if (branchId) conditions.push(eq(kitchenOrders.branchId, branchId));
+    const orders = await db.select().from(kitchenOrders).where(and(...conditions)).orderBy(desc(kitchenOrders.createdAt));
+    if (orders.length === 0) return [];
+    const orderIds = orders.map(o => o.id);
+    const items = await db.select().from(kitchenOrderItems).where(inArray(kitchenOrderItems.orderId, orderIds));
+    return orders.map(o => ({ ...o, items: items.filter(i => i.orderId === o.id) }));
+  },
+
   async updateKitchenOrderStatus(id: string, status: string, estimatedMinutes?: number): Promise<KitchenOrder | undefined> {
     const payload: any = { status, updatedAt: new Date() };
     if (estimatedMinutes !== undefined) payload.estimatedMinutes = estimatedMinutes;

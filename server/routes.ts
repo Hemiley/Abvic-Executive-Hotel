@@ -1302,6 +1302,19 @@ export function registerRoutes(app: Express) {
     res.json(await storage.getKitchenOrders(branchId, status));
   });
 
+  // Food sales by source + date range — used by receptionist & bar to download shift food orders
+  app.get("/api/kitchen/orders/food-sales", requireAuth, async (req, res) => {
+    const source = typeof req.query.source === "string" ? req.query.source : undefined;
+    const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
+    if (!source || !from || !to || isNaN(from.getTime()) || isNaN(to.getTime())) {
+      return res.status(400).json({ message: "source, from, and to are required" });
+    }
+    const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
+    const orders = await storage.getKitchenOrdersBySourceAndRange(source, from, to, branchId);
+    res.json(orders);
+  });
+
   app.post("/api/kitchen/orders", requireAuth, async (req, res) => {
     const parsed = createKitchenOrderSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
