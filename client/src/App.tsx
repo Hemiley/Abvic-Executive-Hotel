@@ -94,6 +94,7 @@ function AppRoutes() {
       <Route path="/kitchen/inventory" element={<KitchenProtectedRoute><KitchenInventory /></KitchenProtectedRoute>} />
       <Route path="/kitchen/shifts" element={<KitchenProtectedRoute><KitchenShifts /></KitchenProtectedRoute>} />
       <Route path="/kitchen/reports" element={<KitchenProtectedRoute><KitchenReports /></KitchenProtectedRoute>} />
+      <Route path="/kitchen/notifications" element={<KitchenProtectedRoute><NotificationsPage /></KitchenProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/abvichoteldashboard" replace />} />
     </Routes>

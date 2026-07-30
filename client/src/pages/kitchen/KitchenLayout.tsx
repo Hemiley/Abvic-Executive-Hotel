@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useSettings } from "../../context/SettingsContext";
+import { useNotifications } from "../../context/NotificationsContext";
 import { api, type KitchenShift } from "../../lib/api";
 
 const CHEF_NAV = [
@@ -25,6 +26,7 @@ const ADMIN_KITCHEN_NAV = [
 export default function KitchenLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+  const { unread } = useNotifications();
   const navigate = useNavigate();
   const [activeShift, setActiveShift] = useState<KitchenShift | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">(
@@ -74,6 +76,25 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
               {item.label}
             </NavLink>
           ))}
+
+          {/* Notifications — full page link */}
+          <NavLink
+            to="/kitchen/notifications"
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <span className="nav-icon">🔔</span>
+            <span style={{ flex: 1 }}>Notifications</span>
+            {unread > 0 && (
+              <span style={{
+                background: "var(--danger)", color: "#fff",
+                fontSize: 10, borderRadius: 999, padding: "1px 6px",
+                fontWeight: 700, marginLeft: 4,
+              }}>
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </NavLink>
         </nav>
         <div className="shift-pill">
           <span className={`dot ${activeShift ? "dot-active" : "dot-inactive"}`} />
