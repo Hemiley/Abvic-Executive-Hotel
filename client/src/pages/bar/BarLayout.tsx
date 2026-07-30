@@ -60,8 +60,10 @@ export default function BarLayout({ children }: { children: ReactNode }) {
   );
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [sidebarNotifOpen, setSidebarNotifOpen] = useState(false);
+  const sidebarNotifRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close topbar dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
@@ -71,6 +73,17 @@ export default function BarLayout({ children }: { children: ReactNode }) {
     if (notifOpen) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [notifOpen]);
+
+  // Close sidebar dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (sidebarNotifRef.current && !sidebarNotifRef.current.contains(e.target as Node)) {
+        setSidebarNotifOpen(false);
+      }
+    }
+    if (sidebarNotifOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [sidebarNotifOpen]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -119,6 +132,68 @@ export default function BarLayout({ children }: { children: ReactNode }) {
               {item.label}
             </NavLink>
           ))}
+
+          {/* Sidebar notification entry */}
+          <div className="sidebar-notif-wrap" ref={sidebarNotifRef}>
+            <button
+              className="nav-link notif-nav-btn"
+              onClick={() => setSidebarNotifOpen(o => !o)}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: sidebarNotifOpen ? "rgba(124,139,255,0.12)" : undefined }}
+            >
+              <span className="nav-icon">🔔</span>
+              Notifications
+              {unread > 0 && (
+                <span className="notif-badge sidebar-notif-badge">{unread > 99 ? "99+" : unread}</span>
+              )}
+            </button>
+
+            {sidebarNotifOpen && (
+              <div className="notif-dropdown sidebar-notif-dropdown">
+                <div className="notif-header">
+                  <span>
+                    Notifications
+                    {unread > 0 && (
+                      <span className="notif-header-badge" style={{ marginLeft: 8 }}>{unread} unread</span>
+                    )}
+                  </span>
+                  {unread > 0 && (
+                    <button
+                      className="btn secondary"
+                      style={{ fontSize: "0.72rem", padding: "2px 10px" }}
+                      onClick={() => markAllRead()}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                {notifications.length === 0 ? (
+                  <div className="notif-empty">🎉 You're all caught up!</div>
+                ) : (
+                  notifications.slice(0, 20).map(n => (
+                    <div
+                      key={n.id}
+                      className={`notif-item ${!n.read ? "unread" : ""}`}
+                      onClick={() => { if (!n.read) markRead(n.id); }}
+                    >
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 15, flexShrink: 0 }}>
+                          {NOTIF_ICONS[n.type] || "🔔"}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div>{n.message}</div>
+                          <div className="notif-time">{relativeTime(n.createdAt)}</div>
+                        </div>
+                        {!n.read && (
+                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 4 }} />
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </nav>
         <div className="shift-pill">
           <span className={`dot ${barShift ? "dot-active" : "dot-inactive"}`} />
