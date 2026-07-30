@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { api, type BarReport, type BarSale, type BarSaleItem } from "../../lib/api";
+import { api, type BarReport, type BarSale, type BarSaleItem, type KitchenOrder, type KitchenOrderItem } from "../../lib/api";
 import { useSettings } from "../../context/SettingsContext";
+
+const FOOD_STATUS_COLORS: Record<string, string> = {
+  new: "#6366f1", accepted: "#3b82f6", preparing: "#f59e0b",
+  ready: "#4ade80", served: "#94a3b8", cancelled: "#f87171",
+};
 
 type Range = { from: string; to: string; label: string };
 
@@ -60,6 +65,11 @@ export default function BarReports() {
   const [customTo, setCustomTo] = useState("");
   const [error, setError] = useState("");
 
+  // Food orders
+  const [foodOrders, setFoodOrders] = useState<(KitchenOrder & { items: KitchenOrderItem[] })[] | null>(null);
+  const [foodLoading, setFoodLoading] = useState(false);
+  const [foodError, setFoodError] = useState("");
+
   function applyPreset(label: string) {
     const today = new Date();
     const pad = (d: Date) => d.toISOString().slice(0, 10);
@@ -89,6 +99,14 @@ export default function BarReports() {
       .then(setReport)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+
+    setFoodLoading(true); setFoodError("");
+    const fromISO = new Date(range.from + "T00:00:00").toISOString();
+    const toISO = new Date(range.to + "T23:59:59.999").toISOString();
+    api.getFoodSalesByDateRange("bar", fromISO, toISO)
+      .then(setFoodOrders)
+      .catch(e => setFoodError(e.message))
+      .finally(() => setFoodLoading(false));
   }, [range.from, range.to]);
 
   const fmt = (n: number | string) => `₦${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
@@ -162,6 +180,67 @@ export default function BarReports() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `waiter-sales-${range.from}-to-${range.to}.csv`;
+    a.click();
+  }
+
+  function exportFoodExcel() {
+    if (!foodOrders) return;
+    const wb = XLSX.utils.book_new();
+    const hotelName = settings?.hotelName || "AEH";
+
+    const served = foodOrders.filter(o => o.status === "served").length;
+    const cancelled = foodOrders.filter(o => o.status === "cancelled").length;
+    const summaryData = [
+      [hotelName],
+      ["Bar Food Sales Report", range.label],
+      ["Period", `${range.from} to ${range.to}`],
+      ["Generated", new Date().toLocaleString("en-NG")],
+      [],
+      ["Total Orders", foodOrders.length],
+      ["Served", served],
+      ["Cancelled", cancelled],
+      ["Active / Pending", foodOrders.length - served - cancelled],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1["!cols"] = [{ wch: 28 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws1, "Summary");
+
+    const orderHeaders = ["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"];
+    const orderRows = foodOrders.map(o => [
+      o.orderNumber, o.customerName ?? "", o.tableOrRoom ?? "",
+      o.staffName, o.priority, o.status, o.items?.length ?? 0,
+      new Date(o.createdAt).toLocaleString("en-NG"),
+    ]);
+    const ws2 = XLSX.utils.aoa_to_sheet([orderHeaders, ...orderRows]);
+    ws2["!cols"] = orderHeaders.map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, ws2, "Orders");
+
+    const itemHeaders = ["Order #", "Meal", "Qty", "Notes"];
+    const itemRows: (string | number)[][] = [];
+    for (const o of foodOrders) {
+      for (const it of o.items ?? []) {
+        itemRows.push([o.orderNumber, it.mealName, it.quantity, it.notes ?? ""]);
+      }
+    }
+    const ws3 = XLSX.utils.aoa_to_sheet([itemHeaders, ...itemRows]);
+    ws3["!cols"] = [{ wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws3, "Items Detail");
+
+    XLSX.writeFile(wb, `food-sales-bar-${range.from}-to-${range.to}.xlsx`);
+  }
+
+  function exportFoodCsv() {
+    if (!foodOrders) return;
+    const header = "Order #,Customer,Table / Room,Staff,Priority,Status,Items,Time\n";
+    const rows = foodOrders.map(o =>
+      [o.orderNumber, o.customerName ?? "", o.tableOrRoom ?? "", o.staffName, o.priority, o.status, o.items?.length ?? 0, new Date(o.createdAt).toLocaleString("en-NG")]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`)
+        .join(",")
+    ).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `food-sales-bar-${range.from}-to-${range.to}.csv`;
     a.click();
   }
 
@@ -369,6 +448,76 @@ export default function BarReports() {
           )}
         </>
       )}
+
+      {/* ── Food Orders ── */}
+      <div style={{ marginTop: 32 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          <h2 style={{ margin: 0 }}>🍽️ Food Orders from Bar — {range.label}</h2>
+          {foodOrders && foodOrders.length > 0 && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn secondary" style={{ fontSize: "0.8rem", padding: "5px 12px" }} onClick={exportFoodExcel}>📊 Excel</button>
+              <button className="btn secondary" style={{ fontSize: "0.8rem", padding: "5px 12px" }} onClick={exportFoodCsv}>📄 CSV</button>
+            </div>
+          )}
+        </div>
+
+        {foodOrders && foodOrders.length > 0 && (
+          <div className="stat-grid" style={{ marginBottom: 16 }}>
+            {[
+              { label: "Total Orders", value: foodOrders.length, icon: "📋" },
+              { label: "Served", value: foodOrders.filter(o => o.status === "served").length, icon: "✅" },
+              { label: "Cancelled", value: foodOrders.filter(o => o.status === "cancelled").length, icon: "❌" },
+              { label: "Active / Pending", value: foodOrders.filter(o => !["served", "cancelled"].includes(o.status)).length, icon: "⏳" },
+            ].map(c => (
+              <div key={c.label} className="stat-card glass">
+                <div className="stat-icon">{c.icon}</div>
+                <div><div className="stat-value">{c.value}</div><div className="stat-label">{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {foodError && <p className="error-text" style={{ marginBottom: 12 }}>{foodError}</p>}
+        {foodLoading && <p style={{ color: "var(--muted)" }}>Loading food orders...</p>}
+
+        {!foodLoading && foodOrders && foodOrders.length === 0 && (
+          <div className="glass" style={{ padding: 32, borderRadius: 12, textAlign: "center", color: "var(--muted)" }}>
+            No food orders from bar for {range.label}.
+          </div>
+        )}
+
+        {!foodLoading && foodOrders && foodOrders.length > 0 && (
+          <div className="glass" style={{ borderRadius: 12, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr>
+                  {["Order #", "Customer", "Table / Room", "Staff", "Priority", "Status", "Items", "Time"].map(h => (
+                    <th key={h} style={{ padding: "10px 14px", background: "rgba(255,255,255,0.05)", color: "var(--muted)", fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", textAlign: "left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {foodOrders.map(o => (
+                  <tr key={o.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <td style={{ padding: "8px 14px", fontFamily: "monospace", fontSize: "0.8rem" }}>#{o.orderNumber}</td>
+                    <td style={{ padding: "8px 14px" }}>{o.customerName || "—"}</td>
+                    <td style={{ padding: "8px 14px" }}>{o.tableOrRoom || "—"}</td>
+                    <td style={{ padding: "8px 14px" }}>{o.staffName}</td>
+                    <td style={{ padding: "8px 14px", textTransform: "capitalize" }}>
+                      <span style={{ fontWeight: o.priority !== "normal" ? 700 : 400, color: o.priority === "vip" ? "#f59e0b" : o.priority === "urgent" ? "#f87171" : "inherit" }}>{o.priority}</span>
+                    </td>
+                    <td style={{ padding: "8px 14px" }}>
+                      <span style={{ color: FOOD_STATUS_COLORS[o.status] ?? "inherit", fontWeight: 600, textTransform: "capitalize" }}>{o.status}</span>
+                    </td>
+                    <td style={{ padding: "8px 14px" }}>{o.items?.length ?? 0}</td>
+                    <td style={{ padding: "8px 14px", color: "var(--muted)", fontSize: "0.8rem" }}>{new Date(o.createdAt).toLocaleString("en-NG")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

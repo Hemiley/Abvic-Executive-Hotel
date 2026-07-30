@@ -70,7 +70,7 @@ function AppRoutes() {
       <Route path="/walk-in" element={<ProtectedRoute><WalkInBooking /></ProtectedRoute>} />
       <Route path="/reservations" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
       <Route path="/rooms" element={<ProtectedRoute><Rooms /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute adminOnly><Reports /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/audit-log" element={<ProtectedRoute><AuditLog /></ProtectedRoute>} />
       <Route path="/staff" element={<ProtectedRoute adminOnly><Staff /></ProtectedRoute>} />
       <Route path="/branches" element={<ProtectedRoute adminOnly><Branches /></ProtectedRoute>} />

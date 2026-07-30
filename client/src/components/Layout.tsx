@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { to: "/walk-in", label: "Walk-in Booking", icon: "🛎️" },
   { to: "/reservations", label: "Reservations", icon: "📋" },
   { to: "/rooms", label: "Rooms", icon: "🚪" },
-  { to: "/reports", label: "Reports", icon: "📊", roles: ["admin"] },
+  { to: "/reports", label: "Reports", icon: "📊", roles: ["admin", "supervisor", "receptionist"] },
   { to: "/audit-log", label: "Audit Log", icon: "🔒", roles: ["admin", "supervisor"] },
   { to: "/staff", label: "Staff Management", icon: "🧑‍💼", roles: ["admin"] },
   { to: "/branches", label: "Branches", icon: "🏢", roles: ["admin"] },
