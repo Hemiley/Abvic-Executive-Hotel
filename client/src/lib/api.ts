@@ -409,6 +409,7 @@ export const api = {
   },
 
   // Kitchen Management
+  getKitchenMenu: (branchId?: string) => request<KitchenInventoryItem[]>(`/api/kitchen/menu${branchId ? `?branchId=${branchId}` : ""}`),
   getKitchenInventory: (branchId?: string) => request<KitchenInventoryItem[]>(`/api/kitchen/inventory${branchId ? `?branchId=${branchId}` : ""}`),
   createKitchenInventoryItem: (data: any) => request<KitchenInventoryItem>("/api/kitchen/inventory", { method: "POST", body: JSON.stringify(data) }),
   updateKitchenInventoryItem: (id: string, data: any) => request<KitchenInventoryItem>(`/api/kitchen/inventory/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

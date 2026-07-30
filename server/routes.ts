@@ -1209,6 +1209,15 @@ export function registerRoutes(app: Express) {
     }).catch(next);
   }
 
+  // Public read-only menu endpoint — any authenticated user can view available kitchen items + prices
+  app.get("/api/kitchen/menu", requireAuth, async (req, res) => {
+    const branchId = req.session.role === "admin"
+      ? (typeof req.query.branchId === "string" && req.query.branchId ? req.query.branchId : undefined)
+      : scopeBranchId(req);
+    const items = await storage.getKitchenInventory(branchId);
+    res.json(items.filter((i: any) => i.status !== "out_of_stock"));
+  });
+
   // Kitchen Inventory
   app.get("/api/kitchen/inventory", requireKitchenAccess, async (req, res) => {
     const branchId = req.session.role === "admin"
