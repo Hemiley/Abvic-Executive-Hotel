@@ -1333,8 +1333,67 @@ export function registerRoutes(app: Express) {
   app.patch("/api/kitchen/orders/:id/status", requireKitchenAccess, async (req, res) => {
     const { status, estimatedMinutes } = req.body;
     if (!status) return res.status(400).json({ message: "status required" });
+
+    // Transitioning to "preparing" must go through the ingredient-deduction endpoint
+    // so that the status guard and stock deduction are always atomic.
+    if (status === "preparing") {
+      return res.status(400).json({
+        message: "Use POST /api/kitchen/orders/:id/start-preparing to begin preparation.",
+      });
+    }
+
+    // Branch scope — non-admins may only update orders within their own branch
+    const order = await storage.getKitchenOrderById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (req.session.role !== "admin" && req.session.branchId && order.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This order belongs to a different branch" });
+    }
+
     const updated = await storage.updateKitchenOrderStatus(req.params.id, status, estimatedMinutes);
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    res.json(updated);
+  });
+
+  /**
+   * Atomically selects ingredients, deducts them from inventory, and
+   * transitions the order to "preparing" in a single DB transaction.
+   *
+   * - ingredients may be an empty array (chef skips deduction but still
+   *   starts preparing).
+   * - Order must currently be "accepted"; duplicate calls are rejected.
+   * - Every inventory item must belong to the same branch as the order.
+   */
+  app.post("/api/kitchen/orders/:id/start-preparing", requireKitchenAccess, async (req, res) => {
+    const rawIngredients = req.body?.ingredients;
+    const ingredients: { itemId: string; quantity: number }[] = Array.isArray(rawIngredients)
+      ? rawIngredients
+      : [];
+
+    const isAdmin = req.session.role === "admin";
+    const callerBranchId = req.session.branchId;
+
+    let updated;
+    try {
+      updated = await storage.startPreparingWithIngredients(
+        req.params.id,
+        ingredients,
+        callerBranchId,
+        isAdmin,
+        req.session.receptionistId,
+        req.session.receptionistName,
+      );
+    } catch (err: any) {
+      if (err.statusCode) return res.status(err.statusCode).json({ message: err.message });
+      throw err;
+    }
+
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "kitchen_start_preparing",
+      details: `Order ${updated.orderNumber} → preparing; ${ingredients.length} ingredient(s) deducted`,
+    });
+
     res.json(updated);
   });
 

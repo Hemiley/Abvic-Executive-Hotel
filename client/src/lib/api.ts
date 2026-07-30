@@ -427,6 +427,9 @@ export const api = {
   createKitchenOrder: (data: any) => request<KitchenOrder & { items: KitchenOrderItem[] }>("/api/kitchen/orders", { method: "POST", body: JSON.stringify(data) }),
   updateKitchenOrderStatus: (id: string, status: string, estimatedMinutes?: number) =>
     request<KitchenOrder>(`/api/kitchen/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, estimatedMinutes }) }),
+  /** Atomically deducts ingredients and transitions the order to "preparing". Pass an empty array to skip deduction. */
+  startPreparingWithIngredients: (id: string, ingredients: { itemId: string; quantity: number }[]) =>
+    request<KitchenOrder>(`/api/kitchen/orders/${id}/start-preparing`, { method: "POST", body: JSON.stringify({ ingredients }) }),
 
   getKitchenDashboard: () => request<KitchenDashboard>("/api/kitchen/dashboard"),
   getKitchenReports: (from: string, to: string) => request<KitchenReportData>(`/api/kitchen/reports?from=${from}&to=${to}`),

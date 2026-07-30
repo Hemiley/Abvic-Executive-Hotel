@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type KitchenOrder, type KitchenOrderItem } from "../../lib/api";
+import { api, type KitchenOrder, type KitchenOrderItem, type KitchenInventoryItem } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
 const STATUSES = ["new", "accepted", "preparing", "ready", "served", "cancelled"] as const;
@@ -21,6 +21,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 type OrderWithItems = KitchenOrder & { items: KitchenOrderItem[] };
+type IngredientLine = { itemId: string; quantity: number };
 
 export default function KitchenOrders() {
   const { user } = useAuth();
@@ -39,6 +40,13 @@ export default function KitchenOrders() {
     specialInstructions: "",
   });
   const [items, setItems] = useState([{ mealName: "", quantity: 1, notes: "" }]);
+
+  // Ingredient modal state
+  const [ingredientOrder, setIngredientOrder] = useState<OrderWithItems | null>(null);
+  const [inventory, setInventory] = useState<KitchenInventoryItem[]>([]);
+  const [ingredientLines, setIngredientLines] = useState<IngredientLine[]>([{ itemId: "", quantity: 1 }]);
+  const [ingredientSaving, setIngredientSaving] = useState(false);
+  const [ingredientError, setIngredientError] = useState("");
 
   function load() {
     api.getKitchenOrders(filterStatus !== "all" ? filterStatus : undefined)
@@ -76,8 +84,53 @@ export default function KitchenOrders() {
     } catch (e: any) { setError(e.message); }
   }
 
-  const filtered = filterStatus === "all" ? orders : orders.filter(o => o.status === filterStatus);
+  // Open the ingredient-selection modal before transitioning to "preparing"
+  async function openIngredientModal(order: OrderWithItems) {
+    setIngredientError("");
+    setIngredientLines([{ itemId: "", quantity: 1 }]);
+    setIngredientOrder(order);
+    try {
+      const inv = await api.getKitchenInventory();
+      setInventory(inv.filter(i => i.status !== "out_of_stock"));
+    } catch (e: any) {
+      setInventory([]);
+    }
+  }
 
+  /** Deducts selected ingredients then starts preparing. */
+  async function handleDeductAndPrepare() {
+    if (!ingredientOrder) return;
+    setIngredientError(""); setIngredientSaving(true);
+    try {
+      const chosen = ingredientLines.filter(l => l.itemId && l.quantity > 0);
+      await api.startPreparingWithIngredients(ingredientOrder.id, chosen);
+      setIngredientOrder(null);
+      load();
+      if (viewing?.id === ingredientOrder.id) setViewing(prev => prev ? { ...prev, status: "preparing" } : null);
+    } catch (e: any) {
+      setIngredientError(e.message);
+    } finally {
+      setIngredientSaving(false);
+    }
+  }
+
+  /** Starts preparing without deducting any ingredients (sends empty list). */
+  async function handleSkipAndPrepare() {
+    if (!ingredientOrder) return;
+    setIngredientError(""); setIngredientSaving(true);
+    try {
+      await api.startPreparingWithIngredients(ingredientOrder.id, []);
+      setIngredientOrder(null);
+      load();
+      if (viewing?.id === ingredientOrder.id) setViewing(prev => prev ? { ...prev, status: "preparing" } : null);
+    } catch (e: any) {
+      setIngredientError(e.message);
+    } finally {
+      setIngredientSaving(false);
+    }
+  }
+
+  const filtered = filterStatus === "all" ? orders : orders.filter(o => o.status === filterStatus);
   const priorityColor = (p: string) =>
     p === "vip" ? "#f59e0b" : p === "urgent" ? "#f87171" : "var(--muted)";
 
@@ -242,7 +295,7 @@ export default function KitchenOrders() {
                 <button className="btn" onClick={() => updateStatus(viewing, "accepted")}>✓ Accept</button>
               )}
               {viewing.status === "accepted" && (
-                <button className="btn" style={{ background: "#f59e0b" }} onClick={() => updateStatus(viewing, "preparing")}>🔥 Start Preparing</button>
+                <button className="btn" style={{ background: "#f59e0b" }} onClick={() => { setViewing(null); openIngredientModal(viewing); }}>🔥 Start Preparing</button>
               )}
               {viewing.status === "preparing" && (
                 <button className="btn" style={{ background: "#4ade80", color: "#000" }} onClick={() => updateStatus(viewing, "ready")}>✅ Mark Ready</button>
@@ -258,6 +311,79 @@ export default function KitchenOrders() {
             <div className="modal-actions" style={{ marginTop: 16 }}>
               <button className="btn secondary" onClick={() => setViewing(null)}>Close</button>
               <button className="btn secondary" onClick={() => window.print()}>🖨️ Print Ticket</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ingredient Selection Modal */}
+      {ingredientOrder && (
+        <div className="modal-overlay" onClick={() => setIngredientOrder(null)}>
+          <div className="modal glass" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+            <h2>🧂 Select Ingredients</h2>
+            <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginBottom: 16 }}>
+              Order <strong>#{ingredientOrder.orderNumber}</strong> — choose ingredients to deduct from inventory.
+              You can skip this step if no inventory deduction is needed.
+            </p>
+
+            {/* Ingredient lines */}
+            <div style={{ marginBottom: 8 }}>
+              {ingredientLines.map((line, idx) => (
+                <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 110px auto", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                  <select
+                    value={line.itemId}
+                    onChange={e => setIngredientLines(ls => ls.map((l, i) => i === idx ? { ...l, itemId: e.target.value } : l))}
+                    style={{ width: "100%" }}
+                  >
+                    <option value="">— Select ingredient —</option>
+                    {inventory.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.category}) — {Number(item.currentStock).toFixed(2)} {item.unit} available
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    placeholder="Qty"
+                    value={line.quantity}
+                    onChange={e => setIngredientLines(ls => ls.map((l, i) => i === idx ? { ...l, quantity: Number(e.target.value) } : l))}
+                  />
+                  {ingredientLines.length > 1 && (
+                    <button type="button" className="btn danger" style={{ padding: "4px 10px" }}
+                      onClick={() => setIngredientLines(ls => ls.filter((_, i) => i !== idx))}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button type="button" className="btn secondary" style={{ marginBottom: 16 }}
+              onClick={() => setIngredientLines(ls => [...ls, { itemId: "", quantity: 1 }])}>
+              + Add Ingredient
+            </button>
+
+            {inventory.length === 0 && (
+              <p style={{ color: "var(--muted)", fontSize: "0.82rem", marginBottom: 8 }}>
+                No inventory items found. You can still start preparing without selecting ingredients.
+              </p>
+            )}
+
+            {ingredientError && <p className="error-text" style={{ marginBottom: 8 }}>{ingredientError}</p>}
+
+            <div className="modal-actions">
+              <button className="btn secondary" onClick={() => setIngredientOrder(null)}>Cancel</button>
+              <button className="btn secondary" onClick={handleSkipAndPrepare} disabled={ingredientSaving}>
+                {ingredientSaving ? "Starting..." : "Skip & Start Preparing"}
+              </button>
+              <button
+                className="btn"
+                style={{ background: "#f59e0b" }}
+                onClick={handleDeductAndPrepare}
+                disabled={ingredientSaving || ingredientLines.every(l => !l.itemId)}
+              >
+                {ingredientSaving ? "Deducting..." : "🔥 Deduct & Start Preparing"}
+              </button>
             </div>
           </div>
         </div>

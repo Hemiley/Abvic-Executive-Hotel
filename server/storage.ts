@@ -951,6 +951,143 @@ export const storage = {
     return orders.map(o => ({ ...o, items: items.filter(i => i.orderId === o.id) }));
   },
 
+  async getKitchenOrderById(id: string): Promise<KitchenOrder | undefined> {
+    const [order] = await db.select().from(kitchenOrders).where(eq(kitchenOrders.id, id));
+    return order;
+  },
+
+  /**
+   * Atomically validates + records ingredient usage and transitions the order
+   * to "preparing" in one DB transaction.
+   *
+   * Guards enforced before any write:
+   *  - Order must exist and belong to the caller's branch (enforced for all roles,
+   *    including admin — no cross-branch inventory deduction).
+   *  - Order must currently be "accepted" (idempotency guard; retries are safe).
+   *  - Every inventory item must exist and belong to the same branch as the order.
+   *  - Duplicate itemIds are aggregated; total quantity must be > 0.
+   *  - Inventory rows are locked FOR UPDATE (sorted by ID to prevent deadlocks)
+   *    before the read so concurrent preparations cannot produce lost updates.
+   */
+  async startPreparingWithIngredients(
+    orderId: string,
+    ingredients: { itemId: string; quantity: number }[],
+    callerBranchId: string | null | undefined,
+    isAdmin: boolean,
+    staffId?: string,
+    staffName?: string,
+  ): Promise<KitchenOrder> {
+    // Aggregate duplicate itemIds before opening the transaction
+    const itemQuantityMap = new Map<string, number>();
+    for (const ing of ingredients) {
+      if (typeof ing.quantity !== "number" || ing.quantity <= 0) {
+        throw Object.assign(new Error(`Invalid quantity for item ${ing.itemId}`), { statusCode: 400 });
+      }
+      itemQuantityMap.set(ing.itemId, (itemQuantityMap.get(ing.itemId) ?? 0) + ing.quantity);
+    }
+    const aggregated = Array.from(itemQuantityMap.entries()).map(([itemId, quantity]) => ({ itemId, quantity }));
+    // Sort by itemId for consistent lock ordering (prevents deadlocks under concurrency)
+    aggregated.sort((a, b) => a.itemId.localeCompare(b.itemId));
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const txDb = drizzle(client, { schema });
+
+      // 1. Load and lock the order row
+      const orderRows = await txDb
+        .select()
+        .from(kitchenOrders)
+        .where(eq(kitchenOrders.id, orderId))
+        .for("update");
+      const order = orderRows[0];
+      if (!order) {
+        await client.query("ROLLBACK");
+        throw Object.assign(new Error("Order not found"), { statusCode: 404 });
+      }
+
+      // 2. Branch authorization — all roles (including admin) restricted to same branch
+      if (callerBranchId && order.branchId !== callerBranchId) {
+        await client.query("ROLLBACK");
+        throw Object.assign(new Error("This order belongs to a different branch"), { statusCode: 403 });
+      }
+
+      // 3. Status guard — only "accepted" orders may transition to "preparing"
+      if (order.status !== "accepted") {
+        await client.query("ROLLBACK");
+        throw Object.assign(
+          new Error(`Order cannot be prepared from status "${order.status}". Accept it first.`),
+          { statusCode: 409 },
+        );
+      }
+
+      // 4. Lock all inventory rows in sorted order, then validate
+      const orderBranchId = order.branchId;
+      type LockedInvItem = KitchenInventoryItem & { _totalQty: number };
+      const lockedItems: LockedInvItem[] = [];
+      for (const { itemId, quantity } of aggregated) {
+        const invRows = await txDb
+          .select()
+          .from(kitchenInventory)
+          .where(eq(kitchenInventory.id, itemId))
+          .for("update");
+        const invItem = invRows[0];
+        if (!invItem) {
+          await client.query("ROLLBACK");
+          throw Object.assign(new Error(`Inventory item not found: ${itemId}`), { statusCode: 404 });
+        }
+        // Enforce same-branch for every role — no cross-branch deductions
+        if (invItem.branchId !== orderBranchId) {
+          await client.query("ROLLBACK");
+          throw Object.assign(
+            new Error(`Inventory item "${invItem.name}" belongs to a different branch`),
+            { statusCode: 403 },
+          );
+        }
+        lockedItems.push({ ...invItem, _totalQty: quantity });
+      }
+
+      // 5. Write stock movements and update inventory (all rows locked, safe to update)
+      for (const item of lockedItems) {
+        const newStock = Math.max(0, Number(item.currentStock) - item._totalQty);
+        const autoStatus =
+          newStock <= 0 ? "out_of_stock" : newStock <= Number(item.minimumStock) ? "low_stock" : "available";
+
+        await txDb.update(kitchenInventory).set({
+          currentStock: String(newStock),
+          status: autoStatus,
+          lastUpdated: new Date(),
+        }).where(eq(kitchenInventory.id, item.id));
+
+        await txDb.insert(kitchenStockMovements).values({
+          itemId: item.id,
+          itemName: item.name,
+          branchId: item.branchId,
+          type: "used",
+          quantity: String(item._totalQty),
+          note: `Used for order ${order.orderNumber}`,
+          staffId,
+          staffName,
+        });
+      }
+
+      // 6. Transition order to "preparing"
+      const [updated] = await txDb
+        .update(kitchenOrders)
+        .set({ status: "preparing", updatedAt: new Date() })
+        .where(eq(kitchenOrders.id, orderId))
+        .returning();
+
+      await client.query("COMMIT");
+      return updated;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
   async updateKitchenOrderStatus(id: string, status: string, estimatedMinutes?: number): Promise<KitchenOrder | undefined> {
     const payload: any = { status, updatedAt: new Date() };
     if (estimatedMinutes !== undefined) payload.estimatedMinutes = estimatedMinutes;
