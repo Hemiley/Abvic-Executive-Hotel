@@ -1296,7 +1296,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Kitchen Orders
-  app.get("/api/kitchen/orders", requireKitchenAccess, async (req, res) => {
+  app.get("/api/kitchen/orders", requireAuth, async (req, res) => {
     const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     res.json(await storage.getKitchenOrders(branchId, status));
