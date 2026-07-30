@@ -28,6 +28,7 @@ import KitchenOrders from "./pages/kitchen/KitchenOrders";
 import KitchenInventory from "./pages/kitchen/KitchenInventory";
 import KitchenShifts from "./pages/kitchen/KitchenShifts";
 import KitchenReports from "./pages/kitchen/KitchenReports";
+import FoodOrderPage from "./pages/FoodOrderPage";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
@@ -75,6 +76,7 @@ function AppRoutes() {
       <Route path="/branches" element={<ProtectedRoute adminOnly><Branches /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute adminOnly><HotelSettings /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+      <Route path="/food-order" element={<ProtectedRoute><FoodOrderPage source="reception" /></ProtectedRoute>} />
 
       {/* Bar routes */}
       <Route path="/bar" element={<BarProtectedRoute><BarDashboard /></BarProtectedRoute>} />
@@ -83,6 +85,7 @@ function AppRoutes() {
       <Route path="/bar/waiters" element={<BarProtectedRoute><BarWaiters /></BarProtectedRoute>} />
       <Route path="/bar/reports" element={<BarProtectedRoute><BarReports /></BarProtectedRoute>} />
       <Route path="/bar/shifts" element={<BarProtectedRoute><BarShiftHistory /></BarProtectedRoute>} />
+      <Route path="/bar/food-order" element={<BarProtectedRoute><FoodOrderPage source="bar" /></BarProtectedRoute>} />
 
       {/* Kitchen routes */}
       <Route path="/kitchen" element={<KitchenProtectedRoute><KitchenDashboard /></KitchenProtectedRoute>} />

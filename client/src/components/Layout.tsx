@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { to: "/staff", label: "Staff Management", icon: "🧑‍💼", roles: ["admin"] },
   { to: "/branches", label: "Branches", icon: "🏢", roles: ["admin"] },
   { to: "/settings", label: "Hotel Settings", icon: "⚙️", roles: ["admin"] },
+  { to: "/food-order", label: "Order Food", icon: "🍽️" },
   { to: "/bar", label: "Bar Portal", icon: "🍺", roles: ["admin"] },
   { to: "/kitchen", label: "Kitchen Portal", icon: "🍳", roles: ["admin"] },
 ];

@@ -7,6 +7,7 @@ import { api, type BarShift } from "../../lib/api";
 const BAR_NAV = [
   { to: "/bar", label: "Dashboard", icon: "🍺", end: true },
   { to: "/bar/sales", label: "New Sale (POS)", icon: "🧾" },
+  { to: "/bar/food-order", label: "Order Food", icon: "🍽️" },
   { to: "/bar/inventory", label: "Inventory", icon: "📦" },
   { to: "/bar/reports", label: "Reports", icon: "📊" },
   { to: "/bar/shifts", label: "Shift History", icon: "🕐" },
@@ -15,6 +16,7 @@ const BAR_NAV = [
 const SUPERVISOR_BAR_NAV = [
   { to: "/bar", label: "Dashboard", icon: "🍺", end: true },
   { to: "/bar/sales", label: "New Sale (POS)", icon: "🧾" },
+  { to: "/bar/food-order", label: "Order Food", icon: "🍽️" },
   { to: "/bar/inventory", label: "Inventory", icon: "📦" },
   { to: "/bar/waiters", label: "Waiters", icon: "👤" },
   { to: "/bar/reports", label: "Reports", icon: "📊" },
