@@ -60,30 +60,6 @@ export default function BarLayout({ children }: { children: ReactNode }) {
   );
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
-  const [sidebarNotifOpen, setSidebarNotifOpen] = useState(false);
-  const sidebarNotifRef = useRef<HTMLDivElement>(null);
-
-  // Close topbar dropdown when clicking outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
-      }
-    }
-    if (notifOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [notifOpen]);
-
-  // Close sidebar dropdown when clicking outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (sidebarNotifRef.current && !sidebarNotifRef.current.contains(e.target as Node)) {
-        setSidebarNotifOpen(false);
-      }
-    }
-    if (sidebarNotifOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [sidebarNotifOpen]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -97,6 +73,17 @@ export default function BarLayout({ children }: { children: ReactNode }) {
     }, 30000);
     return () => clearInterval(iv);
   }, []);
+
+  // Close topbar dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    if (notifOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [notifOpen]);
 
   async function handleLogout() {
     await logout();
@@ -133,80 +120,24 @@ export default function BarLayout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
 
-          {/* Sidebar notification entry */}
-          <div style={{ position: "relative" }} ref={sidebarNotifRef}>
-            <button
-              onClick={() => setSidebarNotifOpen(o => !o)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "10px 12px", borderRadius: 10,
-                background: sidebarNotifOpen ? "rgba(124,139,255,0.12)" : "transparent",
-                border: "none", cursor: "pointer",
-                color: "var(--muted)", fontSize: 14, fontWeight: 500,
-                textAlign: "left", transition: "all 0.2s ease",
-              }}
-              onMouseOver={e => { e.currentTarget.style.background = "rgba(124,139,255,0.12)"; e.currentTarget.style.color = "var(--text)"; }}
-              onMouseOut={e => { e.currentTarget.style.background = sidebarNotifOpen ? "rgba(124,139,255,0.12)" : "transparent"; e.currentTarget.style.color = "var(--muted)"; }}
-            >
-              <span style={{ fontSize: 16 }}>🔔</span>
-              <span style={{ flex: 1 }}>Notifications</span>
-              {unread > 0 && (
-                <span style={{
-                  background: "var(--danger)", color: "#fff",
-                  fontSize: 10, borderRadius: 999, padding: "1px 6px", fontWeight: 700,
-                }}>
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </button>
-
-            {sidebarNotifOpen && (
-              <div className="notif-dropdown sidebar-notif-dropdown">
-                <div className="notif-header">
-                  <span>
-                    Notifications
-                    {unread > 0 && (
-                      <span className="notif-header-badge" style={{ marginLeft: 8 }}>{unread} unread</span>
-                    )}
-                  </span>
-                  {unread > 0 && (
-                    <button
-                      className="btn secondary"
-                      style={{ fontSize: "0.72rem", padding: "2px 10px" }}
-                      onClick={() => markAllRead()}
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                </div>
-
-                {notifications.length === 0 ? (
-                  <div className="notif-empty">🎉 You're all caught up!</div>
-                ) : (
-                  notifications.slice(0, 20).map(n => (
-                    <div
-                      key={n.id}
-                      className={`notif-item ${!n.read ? "unread" : ""}`}
-                      onClick={() => { if (!n.read) markRead(n.id); }}
-                    >
-                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ fontSize: 15, flexShrink: 0 }}>
-                          {NOTIF_ICONS[n.type] || "🔔"}
-                        </span>
-                        <div style={{ flex: 1 }}>
-                          <div>{n.message}</div>
-                          <div className="notif-time">{relativeTime(n.createdAt)}</div>
-                        </div>
-                        {!n.read && (
-                          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 4 }} />
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+          {/* Notifications — full page link */}
+          <NavLink
+            to="/bar/notifications"
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <span className="nav-icon">🔔</span>
+            <span style={{ flex: 1 }}>Notifications</span>
+            {unread > 0 && (
+              <span style={{
+                background: "var(--danger)", color: "#fff",
+                fontSize: 10, borderRadius: 999, padding: "1px 6px",
+                fontWeight: 700, marginLeft: 4,
+              }}>
+                {unread > 99 ? "99+" : unread}
+              </span>
             )}
-          </div>
+          </NavLink>
         </nav>
         <div className="shift-pill">
           <span className={`dot ${barShift ? "dot-active" : "dot-inactive"}`} />
@@ -224,7 +155,7 @@ export default function BarLayout({ children }: { children: ReactNode }) {
               {theme === "dark" ? "☀️" : "🌙"}
             </button>
 
-            {/* Notification bell */}
+            {/* Topbar notification bell — quick-peek dropdown */}
             <div className="notif-wrap" ref={notifRef}>
               <button
                 className="icon-btn"
@@ -251,7 +182,7 @@ export default function BarLayout({ children }: { children: ReactNode }) {
                       <button
                         className="btn secondary"
                         style={{ fontSize: "0.72rem", padding: "2px 10px" }}
-                        onClick={() => { markAllRead(); }}
+                        onClick={() => markAllRead()}
                       >
                         Mark all read
                       </button>
@@ -265,7 +196,7 @@ export default function BarLayout({ children }: { children: ReactNode }) {
                       <div
                         key={n.id}
                         className={`notif-item ${!n.read ? "unread" : ""}`}
-                        onClick={() => { if (!n.read) markRead(n.id); }}
+                        onClick={() => { if (!n.read) markRead(n.id); setNotifOpen(false); navigate("/bar/notifications"); }}
                       >
                         <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                           <span style={{ fontSize: 16, flexShrink: 0 }}>
@@ -282,6 +213,16 @@ export default function BarLayout({ children }: { children: ReactNode }) {
                       </div>
                     ))
                   )}
+
+                  <div style={{ borderTop: "1px solid var(--glass-border)", padding: "8px 12px 4px" }}>
+                    <button
+                      className="btn secondary full"
+                      style={{ fontSize: "0.8rem" }}
+                      onClick={() => { setNotifOpen(false); navigate("/bar/notifications"); }}
+                    >
+                      View all notifications
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

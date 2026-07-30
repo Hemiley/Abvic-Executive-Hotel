@@ -86,6 +86,7 @@ function AppRoutes() {
       <Route path="/bar/reports" element={<BarProtectedRoute><BarReports /></BarProtectedRoute>} />
       <Route path="/bar/shifts" element={<BarProtectedRoute><BarShiftHistory /></BarProtectedRoute>} />
       <Route path="/bar/food-order" element={<BarProtectedRoute><FoodOrderPage source="bar" /></BarProtectedRoute>} />
+      <Route path="/bar/notifications" element={<BarProtectedRoute><NotificationsPage /></BarProtectedRoute>} />
 
       {/* Kitchen routes */}
       <Route path="/kitchen" element={<KitchenProtectedRoute><KitchenDashboard /></KitchenProtectedRoute>} />
