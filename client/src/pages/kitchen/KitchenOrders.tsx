@@ -25,6 +25,7 @@ type IngredientLine = { itemId: string; quantity: number };
 
 export default function KitchenOrders() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [filterStatus, setFilterStatus] = useState("all");
   const [showNew, setShowNew] = useState(false);
@@ -141,7 +142,7 @@ export default function KitchenOrders() {
           <h1>Kitchen Orders</h1>
           <p className="page-sub">Manage food orders in real time</p>
         </div>
-        <button className="btn" onClick={() => setShowNew(true)}>+ New Order</button>
+        {isAdmin && <button className="btn" onClick={() => setShowNew(true)}>+ New Order</button>}
       </div>
 
       {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}

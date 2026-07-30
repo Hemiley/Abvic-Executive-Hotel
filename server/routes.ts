@@ -1226,9 +1226,8 @@ export function registerRoutes(app: Express) {
     res.json(await storage.getKitchenInventory(branchId));
   });
 
-  app.post("/api/kitchen/inventory", requireKitchenAccess, async (req, res) => {
+  app.post("/api/kitchen/inventory", requireAdmin, async (req, res) => {
     const body = { ...req.body };
-    if (req.session.role !== "admin") body.branchId = req.session.branchId;
     const parsed = insertKitchenInventorySchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
     const item = await storage.createKitchenInventoryItem(parsed.data as any);
@@ -1315,7 +1314,7 @@ export function registerRoutes(app: Express) {
     res.json(orders);
   });
 
-  app.post("/api/kitchen/orders", requireAuth, async (req, res) => {
+  app.post("/api/kitchen/orders", requireAdmin, async (req, res) => {
     const parsed = createKitchenOrderSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
     const branchId = req.session.branchId || req.body.branchId;

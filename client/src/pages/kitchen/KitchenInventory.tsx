@@ -20,6 +20,7 @@ const emptyForm = {
 export default function KitchenInventory() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  // Only the super admin may add new inventory items; others can still edit stock movements
   const canManage = isAdmin || user?.role === "supervisor" || user?.role === "chef";
   const [items, setItems] = useState<KitchenInventoryItem[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -130,7 +131,7 @@ export default function KitchenInventory() {
     <div>
       <div className="page-header">
         <div><h1>Kitchen Inventory</h1><p className="page-sub">Manage kitchen ingredients and stock</p></div>
-        {canManage && <button className="btn" onClick={() => setShowNew(true)}>+ Add Item</button>}
+        {isAdmin && <button className="btn" onClick={() => setShowNew(true)}>+ Add Item</button>}
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
