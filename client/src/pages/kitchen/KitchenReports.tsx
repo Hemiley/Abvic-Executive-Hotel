@@ -269,7 +269,7 @@ export default function KitchenReports() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
               <thead>
                 <tr>
-                  {["Order #", "Time", "Source", "Staff", "Table / Room", "Items", "Status"].map(h => (
+                  {["Order #", "Time", "Source", "Ordered By", "Table / Room", "Items", "Status"].map(h => (
                     <th key={h} style={{
                       padding: "8px 12px", textAlign: "left",
                       color: "var(--muted)", fontWeight: 600,
@@ -299,7 +299,12 @@ export default function KitchenReports() {
                         {SOURCE_LABEL[order.source] ?? order.source}
                       </span>
                     </td>
-                    <td style={{ padding: "10px 12px" }}>{order.staffName}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ fontWeight: 600 }}>{order.staffName || "—"}</div>
+                      {order.customerName && (
+                        <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>for {order.customerName}</div>
+                      )}
+                    </td>
                     <td style={{ padding: "10px 12px", color: "var(--muted)" }}>{order.tableOrRoom || "—"}</td>
                     <td style={{ padding: "10px 12px" }}>
                       {order.items.length === 0
