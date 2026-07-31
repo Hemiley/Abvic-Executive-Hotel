@@ -1,6 +1,6 @@
 # Hotel CMS Admin
 
-A hotel front-desk management system with rooms, reservations, guests, payments, staff shifts, audit logs, reports — plus a full Bar Management Portal.
+A hotel front-desk management system with rooms, reservations, guests, payments, staff shifts, audit logs, reports — plus Bar Management, Kitchen Management, and a Security Attendance Portal.
 
 ## Stack
 
@@ -31,10 +31,12 @@ On first boot, `server/seed.ts` auto-creates an `admin` and `receptionist` accou
 
 | Role | Access |
 |---|---|
-| `admin` | Full system access — hotel + bar portal |
+| `admin` | Full system access — hotel + bar + kitchen + security/attendance |
 | `receptionist` | Hotel front-desk: bookings, rooms, shifts |
-| `supervisor` | Hotel front-desk + audit logs |
+| `supervisor` | Hotel front-desk + audit logs + bar + kitchen |
 | `bar_attendant` | Bar portal only: sales, inventory view, shifts |
+| `chef` | Kitchen portal only: orders, inventory, shifts |
+| `security` | Security portal only: staff sign-in/sign-out |
 
 ## Key files
 
@@ -75,6 +77,35 @@ Admins can also access the bar portal via the sidebar link.
 - `GET /api/bar/sales/:id` — Sale detail + items
 - `GET /api/bar/dashboard` — Attendant dashboard summary
 - `GET /api/bar/reports` — Aggregated sales report with date filtering
+
+## Security Attendance Portal
+
+Accessible at `/security-login`. Security officers log in here and are redirected to `/security`.
+Admins can also access attendance management via the sidebar.
+
+### Security routes
+
+- `/security-login` — Dedicated login for security personnel
+- `/security` — Sign in / sign out staff members (records timestamp automatically)
+- `/security/history` — Today's full attendance log with stats
+- `/attendance` — Admin: full attendance management with filters, edit, delete, CSV export
+- `/attendance/payroll` — Admin: monthly payroll summary per staff member
+
+### Attendance API endpoints
+
+- `POST /api/attendance/sign-in` — Sign in a staff member (security/admin)
+- `POST /api/attendance/:id/sign-out` — Sign out (auto-calculates hours)
+- `GET /api/attendance` — List with filters (date, branch, status, name, position)
+- `PATCH /api/attendance/:id` — Edit record (admin only)
+- `DELETE /api/attendance/:id` — Delete record (admin only)
+- `GET /api/attendance/export` — CSV export data (admin only)
+- `GET /api/attendance/payroll/summary` — Monthly hours summary (admin only)
+
+### Features
+- Duplicate sign-in prevention (same name + branch + date)
+- Server-side timestamps (sign-in and sign-out)
+- Auto-calculated total hours on sign-out
+- Full audit log of all attendance actions
 
 ## Environment secrets
 

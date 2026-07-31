@@ -5,8 +5,10 @@ import { NotificationsProvider } from "./context/NotificationsContext";
 import Layout from "./components/Layout";
 import BarLayout from "./pages/bar/BarLayout";
 import KitchenLayout from "./pages/kitchen/KitchenLayout";
+import SecurityLayout from "./pages/security/SecurityLayout";
 import Login from "./pages/Login";
 import AdminLogin from "./pages/AdminLogin";
+import SecurityLogin from "./pages/SecurityLogin";
 import Dashboard from "./pages/Dashboard";
 import WalkInBooking from "./pages/WalkInBooking";
 import Reservations from "./pages/Reservations";
@@ -29,6 +31,10 @@ import KitchenInventory from "./pages/kitchen/KitchenInventory";
 import KitchenShifts from "./pages/kitchen/KitchenShifts";
 import KitchenReports from "./pages/kitchen/KitchenReports";
 import FoodOrderPage from "./pages/FoodOrderPage";
+import SecurityPortal from "./pages/security/SecurityPortal";
+import SecurityHistory from "./pages/security/SecurityHistory";
+import Attendance from "./pages/Attendance";
+import AttendancePayroll from "./pages/AttendancePayroll";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
@@ -38,6 +44,7 @@ function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element
   // Portal-only roles should not access hotel routes
   if (user.role === "bar_attendant") return <Navigate to="/bar" replace />;
   if (user.role === "chef") return <Navigate to="/kitchen" replace />;
+  if (user.role === "security") return <Navigate to="/security" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -58,11 +65,21 @@ function KitchenProtectedRoute({ children }: { children: JSX.Element }) {
   return <KitchenLayout>{children}</KitchenLayout>;
 }
 
+function SecurityProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading-screen">Loading...</div>;
+  if (!user) return <Navigate to="/security-login" replace />;
+  if (!["security", "admin"].includes(user.role)) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/security" replace />;
+  return <SecurityLayout>{children}</SecurityLayout>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/admin-login" element={<AdminLogin />} />
+      <Route path="/security-login" element={<SecurityLogin />} />
       <Route path="/" element={<Navigate to="/abvichoteldashboard" replace />} />
 
       {/* Hotel routes */}
@@ -95,6 +112,14 @@ function AppRoutes() {
       <Route path="/kitchen/shifts" element={<KitchenProtectedRoute><KitchenShifts /></KitchenProtectedRoute>} />
       <Route path="/kitchen/reports" element={<KitchenProtectedRoute><KitchenReports /></KitchenProtectedRoute>} />
       <Route path="/kitchen/notifications" element={<KitchenProtectedRoute><NotificationsPage /></KitchenProtectedRoute>} />
+
+      {/* Security routes */}
+      <Route path="/security" element={<SecurityProtectedRoute><SecurityPortal /></SecurityProtectedRoute>} />
+      <Route path="/security/history" element={<SecurityProtectedRoute><SecurityHistory /></SecurityProtectedRoute>} />
+
+      {/* Attendance (admin) routes */}
+      <Route path="/attendance" element={<SecurityProtectedRoute adminOnly><Attendance /></SecurityProtectedRoute>} />
+      <Route path="/attendance/payroll" element={<SecurityProtectedRoute adminOnly><AttendancePayroll /></SecurityProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/abvichoteldashboard" replace />} />
     </Routes>

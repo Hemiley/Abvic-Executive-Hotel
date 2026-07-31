@@ -24,6 +24,8 @@ import {
   insertKitchenInventorySchema,
   updateKitchenInventorySchema,
   createKitchenOrderSchema,
+  signInSchema,
+  updateAttendanceSchema,
 } from "@shared/schema";
 
 declare module "express-session" {
@@ -1408,5 +1410,169 @@ export function registerRoutes(app: Express) {
     const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
     const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
     res.json(await storage.getKitchenReports(branchId, from, to));
+  });
+
+  // ─── Security Attendance ─────────────────────────────────────────────────
+
+  function requireSecurityAccess(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
+    storage.getReceptionistById(req.session.receptionistId).then((user) => {
+      if (!user || !user.active) { req.session.destroy(() => {}); return res.status(401).json({ message: "Session invalid" }); }
+      if (user.role !== "security" && user.role !== "admin") return res.status(403).json({ message: "Security access required" });
+      next();
+    }).catch(next);
+  }
+
+  // Sign in a staff member
+  app.post("/api/attendance/sign-in", requireSecurityAccess, async (req, res) => {
+    const parsed = signInSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const { staffName, position, branchId } = parsed.data;
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Prevent duplicate sign-in (already signed in today at same branch)
+    const existing = await storage.getActiveAttendanceForStaff(staffName, branchId, today);
+    if (existing) {
+      return res.status(409).json({ message: `${staffName} is already signed in. Please sign them out first.` });
+    }
+
+    const record = await storage.createAttendanceRecord({
+      date: today,
+      staffName,
+      position,
+      branchId,
+      recordedById: req.session.receptionistId!,
+      recordedByName: req.session.receptionistName!,
+    });
+
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "attendance_sign_in",
+      details: `${staffName} (${position}) signed in at branch ${branchId}`,
+    });
+
+    res.status(201).json(record);
+  });
+
+  // Sign out a staff member
+  app.post("/api/attendance/:id/sign-out", requireSecurityAccess, async (req, res) => {
+    const record = await storage.getAttendanceRecordById(req.params.id);
+    if (!record) return res.status(404).json({ message: "Attendance record not found" });
+    // Non-admin security officers can only sign out staff from their own branch
+    if (req.session.role !== "admin" && record.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "You can only sign out staff from your own branch." });
+    }
+    if (record.status === "signed_out") return res.status(409).json({ message: "Staff member is already signed out." });
+
+    const updated = await storage.signOutAttendance(req.params.id);
+
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "attendance_sign_out",
+      details: `${record.staffName} signed out after ${updated?.totalHours ?? "?"} hours`,
+    });
+
+    res.json(updated);
+  });
+
+  // List attendance records (security sees their branch, admin sees all)
+  app.get("/api/attendance", requireSecurityAccess, async (req, res) => {
+    const isAdmin = req.session.role === "admin";
+    const branchId = isAdmin ? (typeof req.query.branchId === "string" ? req.query.branchId : undefined) : (req.session.branchId || undefined);
+    const filters = {
+      branchId,
+      date: typeof req.query.date === "string" ? req.query.date : undefined,
+      dateFrom: typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined,
+      dateTo: typeof req.query.dateTo === "string" ? req.query.dateTo : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      staffName: typeof req.query.staffName === "string" ? req.query.staffName : undefined,
+      position: typeof req.query.position === "string" ? req.query.position : undefined,
+    };
+    res.json(await storage.getAttendanceRecords(filters));
+  });
+
+  // Get single record
+  app.get("/api/attendance/:id", requireSecurityAccess, async (req, res) => {
+    const record = await storage.getAttendanceRecordById(req.params.id);
+    if (!record) return res.status(404).json({ message: "Record not found" });
+    // Non-admin security officers can only view records from their own branch
+    if (req.session.role !== "admin" && record.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "Access denied — record belongs to a different branch." });
+    }
+    res.json(record);
+  });
+
+  // Update attendance record (admin only)
+  app.patch("/api/attendance/:id", requireAdmin, async (req, res) => {
+    const parsed = updateAttendanceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    const record = await storage.getAttendanceRecordById(req.params.id);
+    if (!record) return res.status(404).json({ message: "Record not found" });
+
+    const payload: any = {};
+    if (parsed.data.staffName !== undefined) payload.staffName = parsed.data.staffName;
+    if (parsed.data.position !== undefined) payload.position = parsed.data.position;
+    if (parsed.data.signInTime !== undefined) payload.signInTime = new Date(parsed.data.signInTime);
+    if (parsed.data.signOutTime !== undefined) payload.signOutTime = new Date(parsed.data.signOutTime);
+    if (parsed.data.status !== undefined) payload.status = parsed.data.status;
+    if (parsed.data.notes !== undefined) payload.notes = parsed.data.notes;
+
+    const updated = await storage.updateAttendanceRecord(req.params.id, payload);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "attendance_updated",
+      details: `Attendance record ${req.params.id} updated`,
+    });
+    res.json(updated);
+  });
+
+  // Delete attendance record (admin only)
+  app.delete("/api/attendance/:id", requireAdmin, async (req, res) => {
+    const record = await storage.getAttendanceRecordById(req.params.id);
+    if (!record) return res.status(404).json({ message: "Record not found" });
+    await storage.deleteAttendanceRecord(req.params.id);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "attendance_deleted",
+      details: `Attendance record for ${record.staffName} on ${record.date} deleted`,
+    });
+    res.status(204).end();
+  });
+
+  // Payroll summary (admin only)
+  app.get("/api/attendance/payroll/summary", requireAdmin, async (req, res) => {
+    const branchId = typeof req.query.branchId === "string" ? req.query.branchId : undefined;
+    const month = typeof req.query.month === "string" ? req.query.month : undefined;
+    res.json(await storage.getAttendancePayrollSummary(branchId, month));
+  });
+
+  // Export as JSON for CSV/Excel (admin only — client does the formatting)
+  app.get("/api/attendance/export", requireAdmin, async (req, res) => {
+    const filters = {
+      branchId: typeof req.query.branchId === "string" ? req.query.branchId : undefined,
+      dateFrom: typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined,
+      dateTo: typeof req.query.dateTo === "string" ? req.query.dateTo : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+    };
+    const records = await storage.getAttendanceRecords(filters);
+    const branches = await storage.getBranches();
+    const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
+    const rows = records.map(r => ({
+      Date: r.date,
+      "Staff Name": r.staffName,
+      Position: r.position,
+      Branch: branchMap[r.branchId] ?? r.branchId,
+      "Sign In": r.signInTime ? new Date(r.signInTime).toLocaleTimeString() : "",
+      "Sign Out": r.signOutTime ? new Date(r.signOutTime).toLocaleTimeString() : "",
+      "Total Hours": r.totalHours ?? "",
+      Status: r.status === "signed_in" ? "Signed In" : "Signed Out",
+      "Recorded By": r.recordedByName,
+    }));
+    res.json(rows);
   });
 }

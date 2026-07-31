@@ -274,13 +274,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   // Session expired or was invalidated — redirect to login immediately
-  // Skip if already on /login or if this is the auth-check/login request itself
+  // Skip if already on a login page or if this is the auth-check/login request itself
+  const loginPages = ["/login", "/admin-login", "/security-login"];
   if (
     res.status === 401 &&
     url !== "/api/auth/login" &&
     url !== "/api/auth/me" &&
-    window.location.pathname !== "/login" &&
-    window.location.pathname !== "/admin-login"
+    !loginPages.includes(window.location.pathname)
   ) {
     window.location.href = "/login";
     throw new Error("Session expired. Please log in again.");
@@ -433,6 +433,28 @@ export const api = {
 
   getKitchenDashboard: () => request<KitchenDashboard>("/api/kitchen/dashboard"),
   getKitchenReports: (from: string, to: string) => request<KitchenReportData>(`/api/kitchen/reports?from=${from}&to=${to}`),
+
+  // Attendance / Security
+  signInAttendance: (data: { staffName: string; position: string; branchId: string }) =>
+    request<any>("/api/attendance/sign-in", { method: "POST", body: JSON.stringify(data) }),
+  signOutAttendance: (id: string) =>
+    request<any>(`/api/attendance/${id}/sign-out`, { method: "POST" }),
+  getAttendance: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return request<any[]>(`/api/attendance${qs}`);
+  },
+  updateAttendance: (id: string, data: any) =>
+    request<any>(`/api/attendance/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteAttendance: (id: string) =>
+    request<void>(`/api/attendance/${id}`, { method: "DELETE" }),
+  exportAttendance: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return request<Record<string, string>[]>(`/api/attendance/export${qs}`);
+  },
+  getAttendancePayroll: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return request<any[]>(`/api/attendance/payroll/summary${qs}`);
+  },
 
   getDashboardSummary: () => request<DashboardSummary>("/api/dashboard/summary"),
   getNotifications: () => request<Notification[]>("/api/notifications"),

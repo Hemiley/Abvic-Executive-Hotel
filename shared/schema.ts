@@ -347,6 +347,44 @@ export type BarShift = typeof barShifts.$inferSelect;
 export type BarSale = typeof barSales.$inferSelect;
 export type BarSaleItem = typeof barSaleItems.$inferSelect;
 
+// ─── Security Attendance ─────────────────────────────────────────────────────
+
+export const attendanceRecords = pgTable("attendance_records", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  staffName: text("staff_name").notNull(),
+  position: text("position").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  signInTime: timestamp("sign_in_time").notNull().defaultNow(),
+  signOutTime: timestamp("sign_out_time"),
+  status: text("status").notNull().default("signed_in"), // signed_in | signed_out
+  totalHours: numeric("total_hours"),
+  recordedById: uuid("recorded_by_id").notNull(),
+  recordedByName: text("recorded_by_name").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const signInSchema = z.object({
+  staffName: z.string().min(1),
+  position: z.string().min(1),
+  branchId: z.string().uuid(),
+});
+
+export const updateAttendanceSchema = z.object({
+  staffName: z.string().min(1).optional(),
+  position: z.string().min(1).optional(),
+  signInTime: z.string().optional(),
+  signOutTime: z.string().optional(),
+  status: z.enum(["signed_in", "signed_out"]).optional(),
+  notes: z.string().optional(),
+});
+
+export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
+export type SignIn = z.infer<typeof signInSchema>;
+export type UpdateAttendance = z.infer<typeof updateAttendanceSchema>;
+
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -443,7 +481,7 @@ export const createReceptionistSchema = z.object({
   password: z.string().min(6),
   fullName: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef"]).default("receptionist"),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef", "security"]).default("receptionist"),
   avatarUrl: z.string().optional(),
   // Required for receptionist/supervisor/bar_attendant; admins are branch-agnostic. Enforced in the route handler
   // since the requirement depends on the chosen role, not on the field alone.
@@ -464,7 +502,7 @@ export const updateHotelSettingsSchema = z.object({
 export const updateReceptionistSchema = z.object({
   fullName: z.string().min(1).optional(),
   email: z.string().email().optional().or(z.literal("")),
-  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef"]).optional(),
+  role: z.enum(["receptionist", "supervisor", "admin", "bar_attendant", "chef", "security"]).optional(),
   avatarUrl: z.string().optional(),
   active: z.boolean().optional(),
   password: z.string().min(6).optional(),

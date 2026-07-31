@@ -279,6 +279,7 @@ export default function Staff() {
                   <option value="supervisor">Supervisor</option>
                   <option value="bar_attendant">Bar Attendant</option>
                   <option value="chef">Chef</option>
+                  <option value="security">Security Officer</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -366,6 +367,7 @@ export default function Staff() {
                   <option value="supervisor">Supervisor</option>
                   <option value="bar_attendant">Bar Attendant</option>
                   <option value="chef">Chef</option>
+                  <option value="security">Security Officer</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

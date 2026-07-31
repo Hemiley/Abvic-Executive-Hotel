@@ -293,6 +293,25 @@ export async function ensureSchema(): Promise<void> {
         quantity  INTEGER NOT NULL DEFAULT 1,
         notes     TEXT
       );
+
+      -- ── Security Attendance ──────────────────────────────────────────────────
+
+      CREATE TABLE IF NOT EXISTS attendance_records (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        date             TEXT NOT NULL,
+        staff_name       TEXT NOT NULL,
+        position         TEXT NOT NULL,
+        branch_id        UUID NOT NULL,
+        sign_in_time     TIMESTAMP NOT NULL DEFAULT NOW(),
+        sign_out_time    TIMESTAMP,
+        status           TEXT NOT NULL DEFAULT 'signed_in',
+        total_hours      NUMERIC,
+        recorded_by_id   UUID NOT NULL,
+        recorded_by_name TEXT NOT NULL,
+        notes            TEXT,
+        created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
+      );
     `);
 
     // ---------- Branch backfill (idempotent) ----------

@@ -17,6 +17,8 @@ const NAV_ITEMS = [
   { to: "/food-order", label: "Order Food", icon: "🍽️" },
   { to: "/bar", label: "Bar Portal", icon: "🍺", roles: ["admin"] },
   { to: "/kitchen", label: "Kitchen Portal", icon: "🍳", roles: ["admin"] },
+  { to: "/attendance", label: "Attendance", icon: "🛡️", roles: ["admin"] },
+  { to: "/security", label: "Security Portal", icon: "✅", roles: ["admin"] },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

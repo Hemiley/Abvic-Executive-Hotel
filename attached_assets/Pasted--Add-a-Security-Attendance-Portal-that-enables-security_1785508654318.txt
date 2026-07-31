@@ -1,0 +1,61 @@
+
+Add a Security Attendance Portal that enables security personnel to manage staff attendance by recording sign-in and sign-out times.
+
+Security Login
+Create a dedicated Security Portal where only authorized security personnel can log in.
+Each security officer should have secure authentication before accessing the attendance system.
+Staff Sign-In
+
+When a staff member arrives, the security officer should:
+
+Search for or type the staff member's name.
+Select the staff member's position/role.
+Select the staff member's branch/location.
+Click the Sign In button.
+
+The system should automatically:
+
+Record the current date.
+Record the exact sign-in time.
+Mark the staff's attendance status as Signed In.
+Staff Sign-Out
+
+When the staff member leaves:
+
+Search for the staff member's attendance record.
+Click the Sign Out button.
+
+The system should automatically:
+
+Record the exact sign-out time.
+Update the attendance status to Signed Out.
+Calculate the total hours worked for that day.
+Super Admin Dashboard
+
+The Super Admin should have access to a comprehensive attendance management dashboard where they can:
+
+View all staff attendance records.
+Filter records by:
+Date
+Staff Name
+Position
+Branch
+Attendance Status
+Search attendance history.
+View daily, weekly, and monthly attendance reports.
+Export attendance records to Excel, CSV, or PDF.
+Payroll Integration
+
+The attendance records should be integrated with the payroll system so that the Super Admin can:
+
+Calculate each employee's monthly working hours.
+Determine attendance, absences, and lateness.
+Use attendance data as part of the monthly salary calculation.
+Generate payroll-ready attendance reports for salary processing.
+Additional Features
+Prevent duplicate sign-ins without signing out first.
+Prevent duplicate sign-outs.
+Display a success message after every sign-in or sign-out.
+Automatically timestamp all attendance records using the server time.
+Maintain a complete audit log of all attendance activities for reporting and accountability.
+Ensure that only the Super Admin can edit or delete attendance records, while security personnel can only record sign-ins and sign-outs.

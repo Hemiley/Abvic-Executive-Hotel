@@ -20,6 +20,7 @@ import {
   kitchenShifts,
   kitchenOrders,
   kitchenOrderItems,
+  attendanceRecords,
   type Branch,
   type InsertBranch,
   type UpdateBranch,
@@ -47,6 +48,7 @@ import {
   type KitchenShift,
   type KitchenOrder,
   type KitchenOrderItem,
+  type AttendanceRecord,
 } from "@shared/schema";
 import { eq, desc, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -1184,5 +1186,127 @@ export const storage = {
       stockUsage,
       shifts,
     };
+  },
+
+  // ─── Attendance ────────────────────────────────────────────────────────────
+  async createAttendanceRecord(data: {
+    date: string;
+    staffName: string;
+    position: string;
+    branchId: string;
+    recordedById: string;
+    recordedByName: string;
+  }): Promise<AttendanceRecord> {
+    const [r] = await db.insert(attendanceRecords).values({ ...data, status: "signed_in" }).returning();
+    return r;
+  },
+
+  async getAttendanceRecords(filters?: {
+    branchId?: string;
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    staffName?: string;
+    position?: string;
+  }): Promise<AttendanceRecord[]> {
+    const conds: any[] = [];
+    if (filters?.branchId) conds.push(eq(attendanceRecords.branchId, filters.branchId));
+    if (filters?.date) conds.push(eq(attendanceRecords.date, filters.date));
+    if (filters?.dateFrom) conds.push(gte(attendanceRecords.date, filters.dateFrom));
+    if (filters?.dateTo) conds.push(lte(attendanceRecords.date, filters.dateTo));
+    if (filters?.status) conds.push(eq(attendanceRecords.status, filters.status));
+    const rows = conds.length
+      ? await db.select().from(attendanceRecords).where(and(...conds)).orderBy(desc(attendanceRecords.signInTime))
+      : await db.select().from(attendanceRecords).orderBy(desc(attendanceRecords.signInTime));
+    // JS filter for name/position (case-insensitive)
+    return rows.filter(r => {
+      if (filters?.staffName && !r.staffName.toLowerCase().includes(filters.staffName.toLowerCase())) return false;
+      if (filters?.position && !r.position.toLowerCase().includes(filters.position.toLowerCase())) return false;
+      return true;
+    });
+  },
+
+  async getAttendanceRecordById(id: string): Promise<AttendanceRecord | undefined> {
+    const [r] = await db.select().from(attendanceRecords).where(eq(attendanceRecords.id, id));
+    return r;
+  },
+
+  async getActiveAttendanceForStaff(staffName: string, branchId: string, date: string): Promise<AttendanceRecord | undefined> {
+    const [r] = await db
+      .select()
+      .from(attendanceRecords)
+      .where(and(
+        eq(attendanceRecords.staffName, staffName),
+        eq(attendanceRecords.branchId, branchId),
+        eq(attendanceRecords.date, date),
+        eq(attendanceRecords.status, "signed_in"),
+      ));
+    return r;
+  },
+
+  async signOutAttendance(id: string): Promise<AttendanceRecord | undefined> {
+    const [record] = await db.select().from(attendanceRecords).where(eq(attendanceRecords.id, id));
+    if (!record) return undefined;
+    const signOutTime = new Date();
+    const signInTime = new Date(record.signInTime);
+    const diffMs = signOutTime.getTime() - signInTime.getTime();
+    const totalHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+    const [r] = await db
+      .update(attendanceRecords)
+      .set({ signOutTime, status: "signed_out", totalHours, updatedAt: new Date() })
+      .where(eq(attendanceRecords.id, id))
+      .returning();
+    return r;
+  },
+
+  async updateAttendanceRecord(id: string, data: Partial<{
+    staffName: string;
+    position: string;
+    signInTime: Date;
+    signOutTime: Date | null;
+    status: string;
+    totalHours: string | null;
+    notes: string | null;
+  }>): Promise<AttendanceRecord | undefined> {
+    const payload: any = { ...data, updatedAt: new Date() };
+    // Recalculate hours if both times provided
+    if (payload.signInTime && payload.signOutTime) {
+      const diff = new Date(payload.signOutTime).getTime() - new Date(payload.signInTime).getTime();
+      payload.totalHours = (diff / (1000 * 60 * 60)).toFixed(2);
+    }
+    const [r] = await db.update(attendanceRecords).set(payload).where(eq(attendanceRecords.id, id)).returning();
+    return r;
+  },
+
+  async deleteAttendanceRecord(id: string): Promise<boolean> {
+    const result = await db.delete(attendanceRecords).where(eq(attendanceRecords.id, id)).returning();
+    return result.length > 0;
+  },
+
+  async getAttendancePayrollSummary(branchId?: string, month?: string): Promise<{
+    staffName: string; position: string; branchId: string;
+    totalDays: number; totalHours: number; signedOutDays: number;
+  }[]> {
+    const conds: any[] = [];
+    if (branchId) conds.push(eq(attendanceRecords.branchId, branchId));
+    if (month) {
+      // month = "YYYY-MM"
+      conds.push(gte(attendanceRecords.date, `${month}-01`));
+      conds.push(lte(attendanceRecords.date, `${month}-31`));
+    }
+    const rows = conds.length
+      ? await db.select().from(attendanceRecords).where(and(...conds))
+      : await db.select().from(attendanceRecords);
+    // Group by staffName + position + branchId
+    const map: Record<string, { staffName: string; position: string; branchId: string; totalDays: number; totalHours: number; signedOutDays: number }> = {};
+    for (const r of rows) {
+      const key = `${r.staffName}||${r.position}||${r.branchId}`;
+      if (!map[key]) map[key] = { staffName: r.staffName, position: r.position, branchId: r.branchId, totalDays: 0, totalHours: 0, signedOutDays: 0 };
+      map[key].totalDays++;
+      if (r.totalHours) map[key].totalHours += Number(r.totalHours);
+      if (r.status === "signed_out") map[key].signedOutDays++;
+    }
+    return Object.values(map).sort((a, b) => a.staffName.localeCompare(b.staffName));
   },
 };
