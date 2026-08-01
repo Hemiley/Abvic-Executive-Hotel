@@ -26,6 +26,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { settings } = useSettings();
   const { unread } = useNotifications();
   const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(
     (localStorage.getItem("theme") as "dark" | "light") || "dark"
   );
@@ -41,7 +42,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
+      {/* Mobile overlay backdrop */}
+      <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+
       <aside className="sidebar glass">
         <div className="brand">
           {settings?.logoUrl ? (
@@ -51,7 +55,8 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
           <span>{settings?.hotelName || "AEH"}</span>
         </div>
-        <nav>
+        {/* Close nav links on tap (mobile) */}
+        <nav onClick={() => setSidebarOpen(false)}>
           {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role || "")).map((item) => (
             <NavLink
               key={item.to}
@@ -62,8 +67,6 @@ export default function Layout({ children }: { children: ReactNode }) {
               {item.label}
             </NavLink>
           ))}
-
-          {/* Notifications — full page nav link */}
           <NavLink
             to="/notifications"
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
@@ -81,22 +84,26 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       <div className="main-col">
         <header className="topbar glass">
-          <div className="topbar-title">{user?.role === "admin" ? "Super Admin Console" : "Receptionist Console"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu">
+              <span className="menu-btn-bar" />
+              <span className="menu-btn-bar" />
+              <span className="menu-btn-bar" />
+            </button>
+            <div className="topbar-title">{user?.role === "admin" ? "Super Admin Console" : "Receptionist Console"}</div>
+          </div>
           <div className="topbar-actions">
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "☀️" : "🌙"}
             </button>
-
             <div className="user-chip">
               <div className="avatar">{user?.fullName?.charAt(0) || "R"}</div>
-              <div>
+              <div className="user-chip-text">
                 <div className="user-name">{user?.fullName}</div>
                 <div className="user-role">{user?.role}</div>
               </div>
             </div>
-            <button className="btn secondary" onClick={handleLogout}>
-              Log out
-            </button>
+            <button className="btn secondary" onClick={handleLogout}>Log out</button>
           </div>
         </header>
         <main className="content">{children}</main>

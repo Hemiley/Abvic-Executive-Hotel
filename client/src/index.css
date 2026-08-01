@@ -2041,3 +2041,161 @@ select option {
   border-color: rgba(239,68,68,0.3);
   color: #f87171;
 }
+
+/* ── Mobile hamburger menu button ─────────────────────── */
+.menu-btn {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 7px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.menu-btn:hover { background: rgba(124,139,255,0.12); }
+.menu-btn-bar {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+/* Sidebar overlay backdrop — hidden on desktop */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  z-index: 199;
+  backdrop-filter: blur(2px);
+}
+
+/* Hide extra text in user chip on very narrow screens */
+.user-chip-text { display: flex; flex-direction: column; }
+
+/* ── Responsive breakpoints ───────────────────────────── */
+
+/* Tablets: collapse 2-col grids */
+@media (max-width: 900px) {
+  .grid-2 { grid-template-columns: 1fr !important; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Mobile: full sidebar-as-drawer */
+@media (max-width: 768px) {
+  /* Show hamburger, hide sidebar by default */
+  .menu-btn { display: flex; }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    width: 272px !important;
+    margin: 0 !important;
+    border-radius: 0 20px 20px 0 !important;
+    z-index: 200;
+    transform: translateX(-110%);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+  }
+
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-shell.sidebar-open .sidebar-overlay {
+    display: block;
+  }
+
+  /* Topbar */
+  .topbar {
+    margin: 8px 8px 0 8px;
+    padding: 10px 12px;
+  }
+  .topbar-title { font-size: 13px; }
+  .user-chip-text { display: none; }
+  .btn.secondary { font-size: 12px; padding: 7px 10px; }
+
+  /* Content padding */
+  .content { padding: 14px 10px 48px; }
+
+  /* Grids */
+  .grid-2  { grid-template-columns: 1fr !important; gap: 14px !important; }
+  .stat-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .shortcut-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .room-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+
+  /* Tables: wrap in scroll container */
+  .table { min-width: 560px; }
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+  }
+
+  /* Page header stacks vertically */
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* Toolbar wraps */
+  .toolbar { flex-wrap: wrap; gap: 8px; }
+
+  /* Field rows stack */
+  .field-row { flex-direction: column; gap: 0; }
+
+  /* Modals fill screen */
+  .modal {
+    width: calc(100vw - 28px);
+    max-width: 100%;
+    padding: 20px 16px;
+  }
+  .modal-overlay {
+    padding: 14px;
+    align-items: flex-end;
+  }
+
+  /* Login card */
+  .login-card {
+    width: calc(100vw - 28px);
+    max-width: 400px;
+    padding: 28px 20px;
+  }
+
+  /* Typography */
+  h1 { font-size: 20px; }
+  h2 { font-size: 15px; }
+
+  /* Settings card */
+  .settings-card { padding: 20px 16px; }
+
+  /* Receipt */
+  .receipt { width: 100%; }
+
+  /* Shift banner tighter */
+  .shift-banner { padding: 10px 14px; }
+
+  /* Inline grid panels used in SecurityPortal / BarSales etc */
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns: \"1fr 1fr\""] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Extra-small screens */
+@media (max-width: 420px) {
+  .shortcut-grid { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .topbar-title { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

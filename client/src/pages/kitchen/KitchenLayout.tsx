@@ -29,6 +29,7 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
   const { unread } = useNotifications();
   const navigate = useNavigate();
   const [activeShift, setActiveShift] = useState<KitchenShift | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(
     (localStorage.getItem("theme") as "dark" | "light") || "dark"
   );
@@ -54,7 +55,9 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
   const navItems = user?.role === "admin" ? ADMIN_KITCHEN_NAV : CHEF_NAV;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
+      <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+
       <aside className="sidebar glass">
         <div className="brand">
           {settings?.logoUrl ? (
@@ -64,7 +67,7 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
           )}
           <span>Kitchen Portal</span>
         </div>
-        <nav>
+        <nav onClick={() => setSidebarOpen(false)}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -76,8 +79,6 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
               {item.label}
             </NavLink>
           ))}
-
-          {/* Notifications — full page link */}
           <NavLink
             to="/kitchen/notifications"
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
@@ -104,8 +105,15 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
 
       <div className="main-col">
         <header className="topbar glass">
-          <div className="topbar-title">
-            {user?.role === "admin" ? "Admin — Kitchen Portal" : "Chef Console"}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu">
+              <span className="menu-btn-bar" />
+              <span className="menu-btn-bar" />
+              <span className="menu-btn-bar" />
+            </button>
+            <div className="topbar-title">
+              {user?.role === "admin" ? "Admin — Kitchen Portal" : "Chef Console"}
+            </div>
           </div>
           <div className="topbar-actions">
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
@@ -113,7 +121,7 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
             </button>
             <div className="user-chip">
               <div className="avatar">{user?.fullName?.charAt(0) || "C"}</div>
-              <div>
+              <div className="user-chip-text">
                 <div className="user-name">{user?.fullName}</div>
                 <div className="user-role">{user?.role}</div>
               </div>
