@@ -11,8 +11,6 @@ const SECURITY_NAV = [
 const ADMIN_SECURITY_NAV = [
   { to: "/security", label: "Sign In / Out", icon: "✅", end: true },
   { to: "/security/history", label: "Today's Log", icon: "📋" },
-  { to: "/attendance", label: "Attendance Dashboard", icon: "📊" },
-  { to: "/attendance/payroll", label: "Payroll Summary", icon: "💰" },
   { to: "/abvichoteldashboard", label: "← Hotel Dashboard", icon: "🏨" },
 ];
 
