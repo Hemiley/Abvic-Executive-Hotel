@@ -33,8 +33,7 @@ import KitchenReports from "./pages/kitchen/KitchenReports";
 import FoodOrderPage from "./pages/FoodOrderPage";
 import SecurityPortal from "./pages/security/SecurityPortal";
 import SecurityHistory from "./pages/security/SecurityHistory";
-import Attendance from "./pages/Attendance";
-import AttendancePayroll from "./pages/AttendancePayroll";
+import Payroll from "./pages/Payroll";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
   const { user, loading } = useAuth();
@@ -117,9 +116,8 @@ function AppRoutes() {
       <Route path="/security" element={<SecurityProtectedRoute><SecurityPortal /></SecurityProtectedRoute>} />
       <Route path="/security/history" element={<SecurityProtectedRoute><SecurityHistory /></SecurityProtectedRoute>} />
 
-      {/* Attendance (admin) routes */}
-      <Route path="/attendance" element={<SecurityProtectedRoute adminOnly><Attendance /></SecurityProtectedRoute>} />
-      <Route path="/attendance/payroll" element={<SecurityProtectedRoute adminOnly><AttendancePayroll /></SecurityProtectedRoute>} />
+      {/* Payroll (admin) */}
+      <Route path="/payroll" element={<ProtectedRoute adminOnly><Payroll /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/abvichoteldashboard" replace />} />
     </Routes>
