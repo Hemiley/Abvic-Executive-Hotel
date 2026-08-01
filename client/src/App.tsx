@@ -79,7 +79,6 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/admin-login" element={<AdminLogin />} />
-      <Route path="/superadmin-login" element={<SuperAdminLogin />} />
       <Route path="/security-login" element={<SecurityLogin />} />
       <Route path="/" element={<Navigate to="/abvichoteldashboard" replace />} />
 
