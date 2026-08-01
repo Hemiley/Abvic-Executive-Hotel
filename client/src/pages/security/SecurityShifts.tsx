@@ -50,40 +50,91 @@ export default function SecurityShifts() {
 
       const branchLabel = branches.find(b => b.id === shift.branchId)?.name ?? shift.branchId;
       const startLabel = new Date(shift.startTime).toLocaleString("en-GB");
-      const endLabel = shift.endTime ? new Date(shift.endTime).toLocaleString("en-GB") : "Active";
+      const endLabel = shift.endTime ? new Date(shift.endTime).toLocaleString("en-GB") : "Still Active";
+      const dur = duration(shift.startTime, shift.endTime);
 
-      // Build workbook
       const wb = XLSX.utils.book_new();
 
-      // Summary sheet
-      const summaryData = [
-        ["Security Shift Report"],
-        [],
-        ["Officer", shift.officerName],
-        ["Branch", branchLabel],
-        ["Shift Start", startLabel],
-        ["Shift End", endLabel],
-        ["Duration", duration(shift.startTime, shift.endTime)],
-        ["Total Attendance Records", shift.attendanceCount],
-        ["Status", shift.status === "active" ? "Active" : "Closed"],
-      ];
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      wsSummary["!cols"] = [{ wch: 28 }, { wch: 30 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, "Shift Summary");
+      // ── Sheet 1: Shift Summary + embedded attendance table ──────────────────
+      const COLS = ["#", "Staff Name", "Position", "Branch", "Date", "Sign-In Time", "Sign-Out Time", "Total Hours", "Status", "Recorded By"];
 
-      // Attendance sheet
-      if (rows.length > 0) {
-        const wsData = XLSX.utils.json_to_sheet(rows);
-        const headers = Object.keys(rows[0]);
-        wsData["!cols"] = headers.map(() => ({ wch: 20 }));
-        XLSX.utils.book_append_sheet(wb, wsData, "Attendance Log");
+      const summaryRows: (string | number)[][] = [
+        ["SECURITY SHIFT REPORT"],
+        [],
+        ["Officer",                  shift.officerName],
+        ["Branch",                   branchLabel],
+        ["Shift Start",              startLabel],
+        ["Shift End",                endLabel],
+        ["Duration",                 dur],
+        ["Total Staff Sign-Ins",     shift.attendanceCount],
+        ["Shift Status",             shift.status === "active" ? "Active" : "Closed"],
+        [],
+        ["─── ATTENDANCE LOG ───"],
+        [],
+        COLS,
+      ];
+
+      if (rows.length === 0) {
+        summaryRows.push(["", "No attendance records were captured during this shift.", ...Array(COLS.length - 2).fill("")]);
       } else {
-        const wsEmpty = XLSX.utils.aoa_to_sheet([["No attendance records for this shift."]]);
-        XLSX.utils.book_append_sheet(wb, wsEmpty, "Attendance Log");
+        rows.forEach((r, i) => {
+          summaryRows.push([
+            i + 1,
+            r["Staff Name"]   ?? "",
+            r["Position"]     ?? "",
+            r["Branch"]       ?? "",
+            r["Date"]         ?? "",
+            r["Sign In"]      ?? "",
+            r["Sign Out"]     ?? "",
+            r["Total Hours"]  ?? "",
+            r["Status"]       ?? "",
+            r["Recorded By"]  ?? "",
+          ]);
+        });
       }
 
-      const fileName = `security-shift-${new Date(shift.startTime).toISOString().slice(0, 10)}-${shift.officerName.replace(/\s+/g, "_")}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+      ws1["!cols"] = [
+        { wch: 4 },   // #
+        { wch: 24 },  // Staff Name
+        { wch: 20 },  // Position
+        { wch: 18 },  // Branch
+        { wch: 14 },  // Date
+        { wch: 16 },  // Sign-In
+        { wch: 16 },  // Sign-Out
+        { wch: 14 },  // Hours
+        { wch: 16 },  // Status
+        { wch: 22 },  // Recorded By
+      ];
+      XLSX.utils.book_append_sheet(wb, ws1, "Shift Report");
+
+      // ── Sheet 2: Raw Attendance Log (data-only for filtering/pivot) ─────────
+      const logRows: (string | number)[][] = [COLS];
+      if (rows.length === 0) {
+        logRows.push(["", "No attendance records for this shift.", ...Array(COLS.length - 2).fill("")]);
+      } else {
+        rows.forEach((r, i) => {
+          logRows.push([
+            i + 1,
+            r["Staff Name"]   ?? "",
+            r["Position"]     ?? "",
+            r["Branch"]       ?? "",
+            r["Date"]         ?? "",
+            r["Sign In"]      ?? "",
+            r["Sign Out"]     ?? "",
+            r["Total Hours"]  ?? "",
+            r["Status"]       ?? "",
+            r["Recorded By"]  ?? "",
+          ]);
+        });
+      }
+      const ws2 = XLSX.utils.aoa_to_sheet(logRows);
+      ws2["!cols"] = ws1["!cols"];
+      XLSX.utils.book_append_sheet(wb, ws2, "Attendance Log");
+
+      const dateStr = new Date(shift.startTime).toISOString().slice(0, 10);
+      const officerSlug = shift.officerName.replace(/\s+/g, "_");
+      XLSX.writeFile(wb, `security-shift-${dateStr}-${officerSlug}.xlsx`);
     } catch (err: any) {
       alert("Download failed: " + (err.message ?? "Unknown error"));
     } finally {
