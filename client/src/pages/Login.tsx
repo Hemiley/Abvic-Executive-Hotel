@@ -67,8 +67,8 @@ export default function Login() {
           )}
           <span>{settings?.hotelName || "AEH"}</span>
         </div>
-        <h1>Receptionist Login</h1>
-        <p className="login-sub">Sign in to access the front desk console</p>
+        <h1>Staff Login</h1>
+        <p className="login-sub">Sign in to access your portal</p>
         <div className="field">
           <label>Branch</label>
           <select value={branchId} onChange={(e) => setBranchId(e.target.value)} required>
