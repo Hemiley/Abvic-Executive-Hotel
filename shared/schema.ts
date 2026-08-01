@@ -349,12 +349,26 @@ export type BarSaleItem = typeof barSaleItems.$inferSelect;
 
 // ─── Security Attendance ─────────────────────────────────────────────────────
 
+export const securityShifts = pgTable("security_shifts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  officerId: uuid("officer_id").notNull(),
+  officerName: text("officer_name").notNull(),
+  branchId: uuid("branch_id").notNull(),
+  status: text("status").notNull().default("active"), // active | closed
+  startTime: timestamp("start_time").notNull().defaultNow(),
+  endTime: timestamp("end_time"),
+  attendanceCount: integer("attendance_count").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const attendanceRecords = pgTable("attendance_records", {
   id: uuid("id").primaryKey().defaultRandom(),
   date: text("date").notNull(), // YYYY-MM-DD
   staffName: text("staff_name").notNull(),
   position: text("position").notNull(),
   branchId: uuid("branch_id").notNull(),
+  securityShiftId: uuid("security_shift_id"),
   signInTime: timestamp("sign_in_time").notNull().defaultNow(),
   signOutTime: timestamp("sign_out_time"),
   status: text("status").notNull().default("signed_in"), // signed_in | signed_out
@@ -381,6 +395,7 @@ export const updateAttendanceSchema = z.object({
   notes: z.string().optional(),
 });
 
+export type SecurityShift = typeof securityShifts.$inferSelect;
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type SignIn = z.infer<typeof signInSchema>;
 export type UpdateAttendance = z.infer<typeof updateAttendanceSchema>;

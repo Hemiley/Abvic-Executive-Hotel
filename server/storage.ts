@@ -20,6 +20,7 @@ import {
   kitchenShifts,
   kitchenOrders,
   kitchenOrderItems,
+  securityShifts,
   attendanceRecords,
   type Branch,
   type InsertBranch,
@@ -49,6 +50,7 @@ import {
   type KitchenOrder,
   type KitchenOrderItem,
   type AttendanceRecord,
+  type SecurityShift,
 } from "@shared/schema";
 import { eq, desc, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -1188,6 +1190,74 @@ export const storage = {
     };
   },
 
+  // ─── Security Shifts ──────────────────────────────────────────────────────
+  async startSecurityShift(officerId: string, officerName: string, branchId: string): Promise<SecurityShift> {
+    // Close any currently active shift for this branch
+    const [existing] = await db
+      .select()
+      .from(securityShifts)
+      .where(and(eq(securityShifts.branchId, branchId), eq(securityShifts.status, "active")));
+    if (existing) {
+      const count = await db
+        .select()
+        .from(attendanceRecords)
+        .where(eq(attendanceRecords.securityShiftId, existing.id));
+      await db
+        .update(securityShifts)
+        .set({ status: "closed", endTime: new Date(), attendanceCount: count.length })
+        .where(eq(securityShifts.id, existing.id));
+    }
+    const [shift] = await db.insert(securityShifts).values({ officerId, officerName, branchId }).returning();
+    return shift;
+  },
+
+  async getCurrentSecurityShift(branchId: string): Promise<SecurityShift | undefined> {
+    const [shift] = await db
+      .select()
+      .from(securityShifts)
+      .where(and(eq(securityShifts.branchId, branchId), eq(securityShifts.status, "active")))
+      .orderBy(desc(securityShifts.startTime))
+      .limit(1);
+    return shift;
+  },
+
+  async closeSecurityShift(id: string, notes?: string): Promise<SecurityShift | undefined> {
+    const count = await db
+      .select()
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.securityShiftId, id));
+    const [shift] = await db
+      .update(securityShifts)
+      .set({ status: "closed", endTime: new Date(), attendanceCount: count.length, notes: notes ?? null })
+      .where(eq(securityShifts.id, id))
+      .returning();
+    return shift;
+  },
+
+  async getSecurityShifts(branchId?: string): Promise<SecurityShift[]> {
+    if (branchId) {
+      return db
+        .select()
+        .from(securityShifts)
+        .where(eq(securityShifts.branchId, branchId))
+        .orderBy(desc(securityShifts.startTime));
+    }
+    return db.select().from(securityShifts).orderBy(desc(securityShifts.startTime));
+  },
+
+  async getSecurityShiftById(id: string): Promise<SecurityShift | undefined> {
+    const [shift] = await db.select().from(securityShifts).where(eq(securityShifts.id, id));
+    return shift;
+  },
+
+  async getAttendanceByShift(shiftId: string): Promise<AttendanceRecord[]> {
+    return db
+      .select()
+      .from(attendanceRecords)
+      .where(eq(attendanceRecords.securityShiftId, shiftId))
+      .orderBy(attendanceRecords.signInTime);
+  },
+
   // ─── Attendance ────────────────────────────────────────────────────────────
   async createAttendanceRecord(data: {
     date: string;
@@ -1196,6 +1266,7 @@ export const storage = {
     branchId: string;
     recordedById: string;
     recordedByName: string;
+    securityShiftId?: string | null;
   }): Promise<AttendanceRecord> {
     const [r] = await db.insert(attendanceRecords).values({ ...data, status: "signed_in" }).returning();
     return r;

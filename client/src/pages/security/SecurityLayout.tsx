@@ -6,11 +6,13 @@ import { useSettings } from "../../context/SettingsContext";
 const SECURITY_NAV = [
   { to: "/security", label: "Sign In / Out", icon: "✅", end: true },
   { to: "/security/history", label: "Today's Log", icon: "📋" },
+  { to: "/security/shifts", label: "Shift History", icon: "📁" },
 ];
 
 const ADMIN_SECURITY_NAV = [
   { to: "/security", label: "Sign In / Out", icon: "✅", end: true },
   { to: "/security/history", label: "Today's Log", icon: "📋" },
+  { to: "/security/shifts", label: "Shift History", icon: "📁" },
   { to: "/abvichoteldashboard", label: "← Hotel Dashboard", icon: "🏨" },
 ];
 

@@ -1423,7 +1423,83 @@ export function registerRoutes(app: Express) {
     }).catch(next);
   }
 
-  // Sign in a staff member
+  // ─── Security Shifts ──────────────────────────────────────────────────────
+
+  app.post("/api/security/shifts/start", requireSecurityAccess, async (req, res) => {
+    const officerId = req.session.receptionistId!;
+    const officerName = req.session.receptionistName!;
+    const branchId = req.session.branchId || (typeof req.body.branchId === "string" ? req.body.branchId : undefined);
+    if (!branchId) return res.status(400).json({ message: "Branch required to start a shift." });
+    const shift = await storage.startSecurityShift(officerId, officerName, branchId);
+    await storage.logAction({
+      receptionistId: officerId,
+      receptionistName: officerName,
+      action: "security_shift_started",
+      details: `Security shift started at branch ${branchId}`,
+    });
+    res.status(201).json(shift);
+  });
+
+  app.get("/api/security/shifts/current", requireSecurityAccess, async (req, res) => {
+    const isAdmin = req.session.role === "admin";
+    const branchId = isAdmin
+      ? (typeof req.query.branchId === "string" ? req.query.branchId : undefined)
+      : req.session.branchId;
+    if (!branchId) return res.json(null);
+    const shift = await storage.getCurrentSecurityShift(branchId);
+    res.json(shift ?? null);
+  });
+
+  app.post("/api/security/shifts/:id/end", requireSecurityAccess, async (req, res) => {
+    const shift = await storage.getSecurityShiftById(req.params.id);
+    if (!shift) return res.status(404).json({ message: "Shift not found." });
+    if (req.session.role !== "admin" && shift.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "Cannot end a shift from another branch." });
+    }
+    if (shift.status === "closed") return res.status(409).json({ message: "Shift is already closed." });
+    const notes = typeof req.body.notes === "string" ? req.body.notes : undefined;
+    const closed = await storage.closeSecurityShift(req.params.id, notes);
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "security_shift_ended",
+      details: `Security shift ${req.params.id} closed with ${closed?.attendanceCount ?? 0} attendance records`,
+    });
+    res.json(closed);
+  });
+
+  app.get("/api/security/shifts", requireSecurityAccess, async (req, res) => {
+    const isAdmin = req.session.role === "admin";
+    const branchId = isAdmin
+      ? (typeof req.query.branchId === "string" ? req.query.branchId : undefined)
+      : req.session.branchId;
+    res.json(await storage.getSecurityShifts(branchId));
+  });
+
+  app.get("/api/security/shifts/:id/attendance", requireSecurityAccess, async (req, res) => {
+    const shift = await storage.getSecurityShiftById(req.params.id);
+    if (!shift) return res.status(404).json({ message: "Shift not found." });
+    if (req.session.role !== "admin" && shift.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    const records = await storage.getAttendanceByShift(req.params.id);
+    const branches = await storage.getBranches();
+    const branchMap = Object.fromEntries(branches.map(b => [b.id, b.name]));
+    const rows = records.map(r => ({
+      "Staff Name": r.staffName,
+      Position: r.position,
+      Branch: branchMap[r.branchId] ?? r.branchId,
+      Date: r.date,
+      "Sign In": r.signInTime ? new Date(r.signInTime).toLocaleTimeString() : "",
+      "Sign Out": r.signOutTime ? new Date(r.signOutTime).toLocaleTimeString() : "Still on premises",
+      "Total Hours": r.totalHours ?? "",
+      Status: r.status === "signed_in" ? "On Premises" : "Departed",
+      "Recorded By": r.recordedByName,
+    }));
+    res.json({ shift, rows });
+  });
+
+  // ─── Sign in a staff member ────────────────────────────────────────────────
   app.post("/api/attendance/sign-in", requireSecurityAccess, async (req, res) => {
     const parsed = signInSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
@@ -1437,6 +1513,9 @@ export function registerRoutes(app: Express) {
       return res.status(409).json({ message: `${staffName} is already signed in. Please sign them out first.` });
     }
 
+    // Attach current active security shift if one exists
+    const activeShift = await storage.getCurrentSecurityShift(branchId);
+
     const record = await storage.createAttendanceRecord({
       date: today,
       staffName,
@@ -1444,6 +1523,7 @@ export function registerRoutes(app: Express) {
       branchId,
       recordedById: req.session.receptionistId!,
       recordedByName: req.session.receptionistName!,
+      securityShiftId: activeShift?.id ?? null,
     });
 
     await storage.logAction({

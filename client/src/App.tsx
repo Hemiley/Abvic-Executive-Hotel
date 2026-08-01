@@ -33,6 +33,7 @@ import KitchenReports from "./pages/kitchen/KitchenReports";
 import FoodOrderPage from "./pages/FoodOrderPage";
 import SecurityPortal from "./pages/security/SecurityPortal";
 import SecurityHistory from "./pages/security/SecurityHistory";
+import SecurityShifts from "./pages/security/SecurityShifts";
 import Payroll from "./pages/Payroll";
 
 function ProtectedRoute({ children, adminOnly = false }: { children: JSX.Element; adminOnly?: boolean }) {
@@ -115,6 +116,7 @@ function AppRoutes() {
       {/* Security routes */}
       <Route path="/security" element={<SecurityProtectedRoute><SecurityPortal /></SecurityProtectedRoute>} />
       <Route path="/security/history" element={<SecurityProtectedRoute><SecurityHistory /></SecurityProtectedRoute>} />
+      <Route path="/security/shifts" element={<SecurityProtectedRoute><SecurityShifts /></SecurityProtectedRoute>} />
 
       {/* Payroll (admin) */}
       <Route path="/payroll" element={<ProtectedRoute adminOnly><Payroll /></ProtectedRoute>} />

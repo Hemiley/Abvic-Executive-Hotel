@@ -1,3 +1,16 @@
+export type SecurityShift = {
+  id: string;
+  officerId: string;
+  officerName: string;
+  branchId: string;
+  status: "active" | "closed";
+  startTime: string;
+  endTime: string | null;
+  attendanceCount: number;
+  notes: string | null;
+  createdAt: string;
+};
+
 export type Shift = {
   id: string;
   receptionistId: string;
@@ -433,6 +446,22 @@ export const api = {
 
   getKitchenDashboard: () => request<KitchenDashboard>("/api/kitchen/dashboard"),
   getKitchenReports: (from: string, to: string) => request<KitchenReportData>(`/api/kitchen/reports?from=${from}&to=${to}`),
+
+  // Security Shifts
+  startSecurityShift: (branchId?: string) =>
+    request<SecurityShift>("/api/security/shifts/start", { method: "POST", body: JSON.stringify({ branchId }) }),
+  getCurrentSecurityShift: (branchId?: string) => {
+    const qs = branchId ? `?branchId=${branchId}` : "";
+    return request<SecurityShift | null>(`/api/security/shifts/current${qs}`);
+  },
+  endSecurityShift: (id: string, notes?: string) =>
+    request<SecurityShift>(`/api/security/shifts/${id}/end`, { method: "POST", body: JSON.stringify({ notes }) }),
+  getSecurityShifts: (branchId?: string) => {
+    const qs = branchId ? `?branchId=${branchId}` : "";
+    return request<SecurityShift[]>(`/api/security/shifts${qs}`);
+  },
+  getSecurityShiftAttendance: (id: string) =>
+    request<{ shift: SecurityShift; rows: Record<string, string>[] }>(`/api/security/shifts/${id}/attendance`),
 
   // Attendance / Security
   signInAttendance: (data: { staffName: string; position: string; branchId: string }) =>
