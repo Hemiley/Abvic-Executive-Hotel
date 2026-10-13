@@ -25,7 +25,7 @@ Schema is in `shared/schema.ts`. To push schema changes:
 npm run db:push
 ```
 
-On first boot, `server/seed.ts` auto-creates an `admin` and `receptionist` account and seeds 7 sample rooms. Credentials are printed to the workflow log on first startup (development only).
+On first boot, `server/seed.ts` creates the `superadmin` and `receptionist` accounts and seeds 7 sample rooms. Passwords are never printed to workflow logs. Set `ADMIN_INITIAL_PASSWORD` as a Replit Secret before startup to choose the admin password; when set, it is synced on every startup.
 
 ## Roles
 

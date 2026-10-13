@@ -33,13 +33,8 @@ export async function seedAdmin() {
     console.log("============================================");
     console.log(" Super Admin account created");
     console.log(` Username: ${ADMIN_USERNAME}`);
-    if (process.env.NODE_ENV !== "production") {
-      console.log(` Password: ${ADMIN_PASSWORD}`);
-    } else {
-      console.log(" Password: (set via ADMIN_INITIAL_PASSWORD env var)");
-    }
     console.log(" Login at: /admin-login");
-    console.log(" Please save these credentials now.");
+    console.log(" Password is not written to logs.");
     console.log("============================================");
   } else if (process.env.ADMIN_INITIAL_PASSWORD) {
     // ADMIN_INITIAL_PASSWORD is explicitly set — sync the password so it
@@ -75,7 +70,7 @@ export async function seedAdmin() {
       console.log("============================================");
       console.log(" Receptionist account created");
       console.log(" Username: receptionist");
-      console.log(` Password: ${RECEPTIONIST_PASSWORD}`);
+      console.log(" Password is not written to logs.");
       console.log("============================================");
     }
   }
