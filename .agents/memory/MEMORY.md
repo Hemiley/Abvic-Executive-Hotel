@@ -2,3 +2,4 @@
 - [drizzle-kit push interactive prompts](drizzle-kit-push-prompts.md) — when replacing a schema wholesale, drop old/unrelated tables first or the rename-detection prompt blocks non-interactively piped runs.
 - [Standalone seed scripts need a main-module guard](standalone-script-entrypoints.md) — exporting an async setup function from a script without an `if (isMainModule)` invocation block makes `tsx script.ts` silently no-op.
 - [This project's dev server has no server-side hot reload](tsx-no-watch-mode.md) — `tsx server/index.ts` runs without `--watch`; editing server files needs a manual workflow restart, or new/changed routes silently 404 into the Vite HTML fallback.
+- [Replit port detection](replit-port-detection.md) — The dev server can bind port 5000 and answer `/api/health` while the configured workflow still times out; diagnose locally before retrying.
