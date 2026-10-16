@@ -30,13 +30,16 @@ export default function KitchenInventory() {
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<KitchenInventoryItem | null>(null);
   const [stockModal, setStockModal] = useState<KitchenInventoryItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<KitchenInventoryItem | null>(null);
   const [stockQty, setStockQty] = useState("");
   const [stockType, setStockType] = useState<"received" | "used" | "waste" | "adjustment">("received");
   const [stockNote, setStockNote] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   function load() {
     api.getKitchenInventory(isAdmin ? filterBranch || undefined : undefined).then(setItems).catch(e => setError(e.message));
@@ -88,6 +91,21 @@ export default function KitchenInventory() {
       load();
     } catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await api.deleteKitchenInventoryItem(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch (e: any) {
+      setDeleteError(e.message || "Could not delete this item.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleStockMovement(e: React.FormEvent) {
@@ -180,9 +198,20 @@ export default function KitchenInventory() {
                 </td>
                 <td style={{ padding: "10px 12px" }}>
                   {canManage && (
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => setStockModal(item)}>Stock</button>
                       <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => openEdit(item)}>Edit</button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          className="btn danger"
+                          style={{ padding: "3px 10px", fontSize: "0.78rem" }}
+                          onClick={() => { setDeleteError(""); setDeleteTarget(item); }}
+                          aria-label={`Delete ${item.name}`}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>
@@ -302,6 +331,48 @@ export default function KitchenInventory() {
                 <button type="submit" className="btn" disabled={saving}>{saving ? "Saving..." : "Update Stock"}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin-only soft-delete confirmation. Historical stock movements are retained. */}
+      {isAdmin && deleteTarget && (
+        <div
+          className="modal-overlay"
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+        >
+          <div
+            className="modal glass"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-kitchen-item-title"
+            aria-describedby="delete-kitchen-item-description"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 id="delete-kitchen-item-title">Delete kitchen item?</h2>
+            <p id="delete-kitchen-item-description">
+              Remove <strong>{deleteTarget.name}</strong> from active inventory and ingredient menus?
+              Existing stock history will be kept.
+            </p>
+            {deleteError && <p className="error-text">{deleteError}</p>}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

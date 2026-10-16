@@ -1217,7 +1217,7 @@ export function registerRoutes(app: Express) {
       ? (typeof req.query.branchId === "string" && req.query.branchId ? req.query.branchId : undefined)
       : scopeBranchId(req);
     const items = await storage.getKitchenInventory(branchId);
-    res.json(items.filter((i: any) => i.status !== "out_of_stock"));
+    res.json(items.filter((i: any) => i.status !== "out_of_stock" && i.status !== "deleted"));
   });
 
   // Kitchen Inventory
@@ -1244,6 +1244,27 @@ export function registerRoutes(app: Express) {
     if (!updated) return res.status(404).json({ message: "Item not found" });
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_item_updated", details: `${updated.name} updated` });
     res.json(updated);
+  });
+
+  app.delete("/api/kitchen/inventory/:id", requireAdmin, async (req, res) => {
+    const inventoryItemId = typeof req.params.id === "string" ? req.params.id : req.params.id[0];
+    if (!inventoryItemId) return res.status(400).json({ message: "Invalid kitchen inventory item id" });
+
+    const existing = await storage.getKitchenInventoryItem(inventoryItemId);
+    if (!existing || existing.status === "deleted") {
+      return res.status(404).json({ message: "Kitchen inventory item not found" });
+    }
+
+    const deleted = await storage.deleteKitchenInventoryItem(existing.id);
+    if (!deleted) return res.status(404).json({ message: "Kitchen inventory item not found" });
+
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "kitchen_item_deleted",
+      details: `${existing.name} removed from active kitchen inventory; stock history retained`,
+    });
+    res.json({ ok: true });
   });
 
   // Kitchen Stock Movements

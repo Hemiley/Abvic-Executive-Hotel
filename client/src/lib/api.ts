@@ -426,6 +426,7 @@ export const api = {
   getKitchenInventory: (branchId?: string) => request<KitchenInventoryItem[]>(`/api/kitchen/inventory${branchId ? `?branchId=${branchId}` : ""}`),
   createKitchenInventoryItem: (data: any) => request<KitchenInventoryItem>("/api/kitchen/inventory", { method: "POST", body: JSON.stringify(data) }),
   updateKitchenInventoryItem: (id: string, data: any) => request<KitchenInventoryItem>(`/api/kitchen/inventory/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteKitchenInventoryItem: (id: string) => request<{ ok: boolean }>(`/api/kitchen/inventory/${id}`, { method: "DELETE" }),
   recordKitchenStockMovement: (data: { itemId: string; type: string; quantity: number; note?: string }) =>
     request<{ ok: boolean }>("/api/kitchen/stock-movements", { method: "POST", body: JSON.stringify(data) }),
 

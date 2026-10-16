@@ -790,8 +790,10 @@ export const storage = {
 
   // ── Kitchen Inventory ────────────────────────────────────────────────────────
   async getKitchenInventory(branchId?: string): Promise<KitchenInventoryItem[]> {
-    if (branchId) return db.select().from(kitchenInventory).where(eq(kitchenInventory.branchId, branchId)).orderBy(kitchenInventory.name);
-    return db.select().from(kitchenInventory).orderBy(kitchenInventory.name);
+    const items = branchId
+      ? await db.select().from(kitchenInventory).where(eq(kitchenInventory.branchId, branchId)).orderBy(kitchenInventory.name)
+      : await db.select().from(kitchenInventory).orderBy(kitchenInventory.name);
+    return items.filter((item) => item.status !== "deleted");
   },
   async getKitchenInventoryItem(id: string): Promise<KitchenInventoryItem | undefined> {
     const [i] = await db.select().from(kitchenInventory).where(eq(kitchenInventory.id, id));
@@ -829,6 +831,14 @@ export const storage = {
     const [updated] = await db.update(kitchenInventory).set(payload).where(eq(kitchenInventory.id, id)).returning();
     return updated;
   },
+  async deleteKitchenInventoryItem(id: string): Promise<KitchenInventoryItem | undefined> {
+    const [deleted] = await db
+      .update(kitchenInventory)
+      .set({ status: "deleted", lastUpdated: new Date() })
+      .where(eq(kitchenInventory.id, id))
+      .returning();
+    return deleted;
+  },
 
   // ── Kitchen Stock Movements ──────────────────────────────────────────────────
   async recordKitchenStockMovement(data: {
@@ -836,7 +846,9 @@ export const storage = {
     staffId?: string; staffName?: string;
   }): Promise<void> {
     const item = await this.getKitchenInventoryItem(data.itemId);
-    if (!item) throw new Error("Item not found");
+    if (!item || item.status === "deleted") {
+      throw Object.assign(new Error("Item not found"), { statusCode: 404 });
+    }
     let newStock = Number(item.currentStock);
     if (data.type === "received") newStock += data.quantity;
     else if (data.type === "used" || data.type === "waste") newStock = Math.max(0, newStock - data.quantity);
@@ -1036,7 +1048,7 @@ export const storage = {
           .where(eq(kitchenInventory.id, itemId))
           .for("update");
         const invItem = invRows[0];
-        if (!invItem) {
+        if (!invItem || invItem.status === "deleted") {
           await client.query("ROLLBACK");
           throw Object.assign(new Error(`Inventory item not found: ${itemId}`), { statusCode: 404 });
         }
@@ -1113,9 +1125,10 @@ export const storage = {
     const allOrders = branchId
       ? await db.select().from(kitchenOrders).where(eq(kitchenOrders.branchId, branchId))
       : await db.select().from(kitchenOrders);
-    const allInventory = branchId
+    const inventoryRecords = branchId
       ? await db.select().from(kitchenInventory).where(eq(kitchenInventory.branchId, branchId))
       : await db.select().from(kitchenInventory);
+    const allInventory = inventoryRecords.filter((item) => item.status !== "deleted");
     const activeShifts = branchId
       ? await db.select().from(kitchenShifts).where(and(eq(kitchenShifts.status, "active"), eq(kitchenShifts.branchId, branchId)))
       : await db.select().from(kitchenShifts).where(eq(kitchenShifts.status, "active"));
