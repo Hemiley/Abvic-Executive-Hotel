@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type KitchenInventoryItem, type Branch } from "../../lib/api";
+import { api, type KitchenInventoryItem, type Branch, type StockSubmission, type KitchenShift } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
 const CATEGORIES = ["Meat", "Poultry", "Seafood", "Grains", "Vegetables", "Oils & Fats", "Seasonings", "Drinks", "Frozen", "Other"];
@@ -20,8 +20,8 @@ const emptyForm = {
 export default function KitchenInventory() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
-  // Only the super admin may add new inventory items; others can still edit stock movements
-  const canManage = isAdmin || user?.role === "supervisor" || user?.role === "chef";
+  const canManage = isAdmin || user?.role === "supervisor";
+  const canTrackStock = canManage || user?.role === "chef";
   const [items, setItems] = useState<KitchenInventoryItem[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [filterBranch, setFilterBranch] = useState("");
@@ -31,6 +31,9 @@ export default function KitchenInventory() {
   const [editing, setEditing] = useState<KitchenInventoryItem | null>(null);
   const [stockModal, setStockModal] = useState<KitchenInventoryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<KitchenInventoryItem | null>(null);
+  const [pendingStock, setPendingStock] = useState<StockSubmission[]>([]);
+  const [activeShift, setActiveShift] = useState<KitchenShift | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [stockQty, setStockQty] = useState("");
   const [stockType, setStockType] = useState<"received" | "used" | "waste" | "adjustment">("received");
   const [stockNote, setStockNote] = useState("");
@@ -45,9 +48,18 @@ export default function KitchenInventory() {
     api.getKitchenInventory(isAdmin ? filterBranch || undefined : undefined).then(setItems).catch(e => setError(e.message));
     if (isAdmin) api.getBranches().then(setBranches).catch(() => {});
     else setForm(f => ({ ...f, branchId: user?.branchId || "" }));
+    if (user?.role === "chef") {
+      api.getPendingStock().then(setPendingStock).catch(e => setError(e.message));
+      api.getActiveKitchenShift().then(setActiveShift).catch(() => setActiveShift(null));
+    }
   }
 
-  useEffect(() => { load(); }, [filterBranch]);
+  useEffect(() => {
+    load();
+    if (user?.role !== "chef") return;
+    const refresh = setInterval(load, 15000);
+    return () => clearInterval(refresh);
+  }, [filterBranch, user?.role]);
 
   const filtered = items.filter(i => {
     const q = search.toLowerCase();
@@ -62,8 +74,8 @@ export default function KitchenInventory() {
       await api.createKitchenInventoryItem({
         ...form,
         pricePerUnit: Number(form.pricePerUnit) || 0,
-        openingStock: Number(form.openingStock),
-        stockReceived: Number(form.stockReceived),
+        openingStock: 0,
+        stockReceived: 0,
         minimumStock: Number(form.minimumStock),
         branchId: isAdmin ? form.branchId : (user?.branchId || ""),
       } as any);
@@ -113,18 +125,46 @@ export default function KitchenInventory() {
     if (!stockModal) return;
     setError(""); setSaving(true);
     try {
-      await api.recordKitchenStockMovement({
-        itemId: stockModal.id,
-        type: stockType,
-        quantity: Number(stockQty),
-        note: stockNote,
-      });
+      if (stockType === "received") {
+        await api.submitStock({
+          department: "kitchen",
+          itemId: stockModal.id,
+          branchId: stockModal.branchId,
+          quantity: Number(stockQty),
+          note: stockNote.trim() || undefined,
+          requestKey: crypto.randomUUID(),
+        });
+      } else {
+        await api.recordKitchenStockMovement({
+          itemId: stockModal.id,
+          type: stockType,
+          quantity: Number(stockQty),
+          note: stockNote,
+        });
+      }
       setStockModal(null);
       setStockQty("");
       setStockNote("");
       load();
     } catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
+  }
+
+  function openStock(item: KitchenInventoryItem) {
+    setStockModal(item);
+    setStockType(canManage ? "received" : "used");
+    setStockQty("");
+    setStockNote("");
+  }
+
+  async function handleAcceptStock(submission: StockSubmission) {
+    setError(""); setAcceptingId(submission.id);
+    try {
+      await api.acceptStock(submission.id);
+      setPendingStock(current => current.filter(item => item.id !== submission.id));
+      load();
+    } catch (e: any) { setError(e.message); }
+    finally { setAcceptingId(null); }
   }
 
   function openEdit(item: KitchenInventoryItem) {
@@ -149,8 +189,40 @@ export default function KitchenInventory() {
     <div>
       <div className="page-header">
         <div><h1>Kitchen Inventory</h1><p className="page-sub">Manage kitchen ingredients and stock</p></div>
-        {isAdmin && <button className="btn" onClick={() => setShowNew(true)}>+ Add Item</button>}
+        {canManage && <button className="btn" onClick={() => setShowNew(true)}>+ Add Item</button>}
       </div>
+
+      {user?.role === "chef" && (
+        <section className="glass" style={{ borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Stock Awaiting Acceptance</h2>
+              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "0.82rem" }}>
+                {activeShift ? "Accepted stock will be recorded on your active shift." : "Start a Kitchen shift before accepting stock."}
+              </p>
+            </div>
+            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{pendingStock.length} pending</span>
+          </div>
+          {pendingStock.length === 0 ? <p style={{ color: "var(--muted)", margin: 0 }}>No stock is waiting for acceptance.</p> : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {pendingStock.map(submission => (
+                <div key={submission.id} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 10 }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <strong>{submission.itemName}</strong>
+                    <div style={{ color: "var(--muted)", fontSize: ".82rem" }}>
+                      {submission.quantity} {submission.unit} · submitted by {submission.submittedByName} · {new Date(submission.submittedAt).toLocaleString()}
+                    </div>
+                    {submission.note && <div style={{ color: "var(--muted)", fontSize: ".82rem" }}>{submission.note}</div>}
+                  </div>
+                  <button className="btn" disabled={!activeShift || acceptingId === submission.id} onClick={() => handleAcceptStock(submission)}>
+                    {acceptingId === submission.id ? "Accepting…" : "Accept stock"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
         <input className="search-input" placeholder="Search items..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
@@ -197,11 +269,11 @@ export default function KitchenInventory() {
                   </span>
                 </td>
                 <td style={{ padding: "10px 12px" }}>
-                  {canManage && (
+                  {canTrackStock && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => setStockModal(item)}>Stock</button>
-                      <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => openEdit(item)}>Edit</button>
-                      {isAdmin && (
+                      <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => openStock(item)}>Stock</button>
+                      {canManage && <button className="btn secondary" style={{ padding: "3px 10px", fontSize: "0.78rem" }} onClick={() => openEdit(item)}>Edit</button>}
+                      {canManage && (
                         <button
                           type="button"
                           className="btn danger"
@@ -249,8 +321,6 @@ export default function KitchenInventory() {
                   </select>
                 </div>
                 <div className="field"><label>Price per Unit (₦)</label><input type="number" min="0" value={form.pricePerUnit} onChange={e => setForm(f => ({ ...f, pricePerUnit: e.target.value }))} /></div>
-                <div className="field"><label>Opening Stock</label><input type="number" min="0" value={form.openingStock} onChange={e => setForm(f => ({ ...f, openingStock: e.target.value }))} /></div>
-                <div className="field"><label>Stock Received</label><input type="number" min="0" value={form.stockReceived} onChange={e => setForm(f => ({ ...f, stockReceived: e.target.value }))} /></div>
                 <div className="field"><label>Minimum Stock Level</label><input type="number" min="0" value={form.minimumStock} onChange={e => setForm(f => ({ ...f, minimumStock: e.target.value }))} /></div>
               </div>
               {error && <p className="error-text">{error}</p>}
@@ -311,7 +381,7 @@ export default function KitchenInventory() {
               <div className="field">
                 <label>Movement Type</label>
                 <select value={stockType} onChange={e => setStockType(e.target.value as any)}>
-                  <option value="received">Stock Received</option>
+                  {canManage && <option value="received">Submit Stock for Acceptance</option>}
                   <option value="used">Used in Kitchen</option>
                   <option value="waste">Waste / Spoilage</option>
                   <option value="adjustment">Manual Adjustment</option>
@@ -319,7 +389,7 @@ export default function KitchenInventory() {
               </div>
               <div className="field">
                 <label>Quantity ({stockModal.unit}) *</label>
-                <input type="number" min="0.01" step="0.01" value={stockQty} onChange={e => setStockQty(e.target.value)} required />
+                <input type="number" min={stockType === "adjustment" ? "0" : "0.01"} step="0.01" value={stockQty} onChange={e => setStockQty(e.target.value)} required />
               </div>
               <div className="field">
                 <label>Note</label>
@@ -335,8 +405,8 @@ export default function KitchenInventory() {
         </div>
       )}
 
-      {/* Admin-only soft-delete confirmation. Historical stock movements are retained. */}
-      {isAdmin && deleteTarget && (
+      {/* Soft-delete confirmation. Historical stock movements are retained. */}
+      {canManage && deleteTarget && (
         <div
           className="modal-overlay"
           onClick={() => { if (!deleting) setDeleteTarget(null); }}

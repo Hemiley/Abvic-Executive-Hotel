@@ -23,6 +23,16 @@ const ADMIN_KITCHEN_NAV = [
   { to: "/abvichoteldashboard", label: "← Hotel Dashboard", icon: "🏨" },
 ];
 
+const SUPERVISOR_KITCHEN_NAV = [
+  { to: "/kitchen", label: "Kitchen Dashboard", icon: "🍳", end: true },
+  { to: "/kitchen/orders", label: "Orders", icon: "📋" },
+  { to: "/kitchen/inventory", label: "Inventory", icon: "🥩" },
+  { to: "/kitchen/shifts", label: "Shift History", icon: "🕐" },
+  { to: "/kitchen/reports", label: "Reports", icon: "📊" },
+  { to: "/bar/inventory", label: "Bar Inventory", icon: "🍺" },
+  { to: "/abvichoteldashboard", label: "← Hotel Dashboard", icon: "🏨" },
+];
+
 export default function KitchenLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
@@ -52,7 +62,11 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
     navigate("/login");
   }
 
-  const navItems = user?.role === "admin" ? ADMIN_KITCHEN_NAV : CHEF_NAV;
+  const navItems = user?.role === "admin"
+    ? ADMIN_KITCHEN_NAV
+    : user?.role === "supervisor"
+    ? SUPERVISOR_KITCHEN_NAV
+    : CHEF_NAV;
 
   return (
     <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
@@ -112,7 +126,7 @@ export default function KitchenLayout({ children }: { children: ReactNode }) {
               <span className="menu-btn-bar" />
             </button>
             <div className="topbar-title">
-              {user?.role === "admin" ? "Admin — Kitchen Portal" : "Chef Console"}
+              {user?.role === "admin" ? "Admin — Kitchen Portal" : user?.role === "supervisor" ? "Supervisor Console" : "Chef Console"}
             </div>
           </div>
           <div className="topbar-actions">

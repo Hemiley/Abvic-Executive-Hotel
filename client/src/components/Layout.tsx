@@ -15,8 +15,8 @@ const NAV_ITEMS = [
   { to: "/branches", label: "Branches", icon: "🏢", roles: ["admin"] },
   { to: "/settings", label: "Hotel Settings", icon: "⚙️", roles: ["admin"] },
   { to: "/food-order", label: "Order Food", icon: "🍽️" },
-  { to: "/bar", label: "Bar Portal", icon: "🍺", roles: ["admin"] },
-  { to: "/kitchen", label: "Kitchen Portal", icon: "🍳", roles: ["admin"] },
+  { to: "/bar/inventory", label: "Bar Inventory", icon: "🍺", roles: ["admin", "supervisor"] },
+  { to: "/kitchen/inventory", label: "Kitchen Inventory", icon: "🍳", roles: ["admin", "supervisor"] },
   { to: "/payroll", label: "Payroll", icon: "💰", roles: ["admin"] },
   { to: "/security", label: "Security Portal", icon: "✅", roles: ["admin"] },
 ];

@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { api, type BarShift, type KitchenOrder, type KitchenOrderItem } from "../../lib/api";
+import { api, type BarShift, type KitchenOrder, type KitchenOrderItem, type StockSubmission } from "../../lib/api";
 import { useSettings } from "../../context/SettingsContext";
 
 function esc(v: string | number | null | undefined) {
   return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function generateShiftReportHtml(shift: BarShift, hotelName: string) {
+function generateShiftReportHtml(shift: BarShift, hotelName: string, acceptedStock: StockSubmission[]) {
   const fmt = (n: string | number | null | undefined) => `₦${Number(n ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
   const openingRows = (shift.openingStockSnapshot as any[]).map(i =>
     `<tr><td>${esc(i.name)}</td><td style="text-align:center">${i.quantity}</td></tr>`).join("");
   const closingRows = (shift.closingStockSnapshot as any[]).map(i =>
     `<tr><td>${esc(i.name)}</td><td style="text-align:center">${i.quantity}</td></tr>`).join("");
+  const acceptedRows = acceptedStock.map(item =>
+    `<tr><td>${esc(item.itemName)}</td><td style="text-align:center">${esc(item.quantity)} ${esc(item.unit)}</td><td>${esc(item.submittedByName)}</td><td>${esc(item.acceptedByName)}</td><td>${esc(item.acceptedAt ? new Date(item.acceptedAt).toLocaleString("en-NG") : "")}</td></tr>`).join("");
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Bar Shift Report — ${esc(hotelName)}</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;color:#111;background:#fff;padding:32px;font-size:13px}
@@ -45,6 +47,8 @@ td{padding:6px 10px;border-bottom:1px solid #eee}tr:nth-child(even) td{backgroun
 <div><h3 style="font-size:13px;margin-bottom:6px">Closing Stock</h3>
 <table><thead><tr><th>Drink</th><th style="text-align:center">Qty</th></tr></thead><tbody>${closingRows || "<tr><td colspan='2'>No snapshot</td></tr>"}</tbody></table></div>
 </div>
+<h2>Stock Received and Accepted During This Shift</h2>
+<table><thead><tr><th>Drink</th><th>Quantity</th><th>Submitted By</th><th>Accepted By</th><th>Accepted At</th></tr></thead><tbody>${acceptedRows || "<tr><td colspan='5'>No stock was accepted during this shift.</td></tr>"}</tbody></table>
 <div class="footer">${esc(hotelName)} — Bar Shift Report | Confidential</div>
 </body></html>`;
 }
@@ -132,8 +136,10 @@ export default function BarShiftHistory() {
     }
   }
 
-  function printShift(shift: BarShift) {
-    const html = generateShiftReportHtml(shift, settings?.hotelName || "AEH");
+  async function printShift(shift: BarShift) {
+    try {
+    const report = await api.getBarShiftReport(shift.id);
+    const html = generateShiftReportHtml(report.shift, settings?.hotelName || "AEH", report.acceptedStock);
     const win = window.open("", "_blank", "width=900,height=700,noopener,noreferrer");
     if (!win) return;
     win.opener = null;
@@ -141,6 +147,46 @@ export default function BarShiftHistory() {
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 400);
+    } catch (e: any) {
+      alert("Could not load shift report: " + e.message);
+    }
+  }
+
+  async function downloadShiftReport(shift: BarShift) {
+    setDownloadingId(shift.id);
+    try {
+      const report = await api.getBarShiftReport(shift.id);
+      const wb = XLSX.utils.book_new();
+      const summary = [
+        [settings?.hotelName || "AEH"],
+        ["Bar Shift Report"],
+        ["Attendant", report.shift.barAttendantName],
+        ["Shift Start", new Date(report.shift.openTime).toLocaleString("en-NG")],
+        ["Shift End", report.shift.closeTime ? new Date(report.shift.closeTime).toLocaleString("en-NG") : "Active"],
+        ["Total Revenue", Number(report.shift.totalRevenue)],
+        ["Bottles Sold", report.shift.totalBottlesSold],
+        ["Transactions", report.shift.totalTransactions],
+        ["Stock Accepted", report.acceptedStock.length],
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summary);
+      summarySheet["!cols"] = [{ wch: 24 }, { wch: 32 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+      const stockHeaders = ["Item", "Quantity", "Submitted By", "Submitted At", "Status", "Accepted By", "Accepted At", "Note"];
+      const stockRows = report.acceptedStock.map(item => [
+        item.itemName, `${item.quantity} ${item.unit}`, item.submittedByName,
+        new Date(item.submittedAt).toLocaleString("en-NG"), item.status,
+        item.acceptedByName || "", item.acceptedAt ? new Date(item.acceptedAt).toLocaleString("en-NG") : "", item.note || "",
+      ]);
+      const stockSheet = XLSX.utils.aoa_to_sheet([stockHeaders, ...(stockRows.length ? stockRows : [["No stock accepted during this shift"]])]);
+      stockSheet["!cols"] = stockHeaders.map(() => ({ wch: 22 }));
+      XLSX.utils.book_append_sheet(wb, stockSheet, "Accepted Stock");
+      XLSX.writeFile(wb, `bar-shift-${shift.barAttendantName.replace(/[^a-z0-9-]+/gi, "-")}-${new Date(shift.openTime).toISOString().slice(0, 10)}.xlsx`);
+    } catch (e: any) {
+      alert("Could not download shift report: " + e.message);
+    } finally {
+      setDownloadingId(null);
+    }
   }
 
   const fmt = (n: string | number) => `₦${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
@@ -194,6 +240,9 @@ export default function BarShiftHistory() {
                 {s.status === "closed" && (
                   <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
                     <button className="btn secondary" onClick={() => printShift(s)}>🖨️ Print Shift Report</button>
+                    <button className="btn secondary" disabled={downloadingId === s.id} onClick={() => downloadShiftReport(s)}>
+                      {downloadingId === s.id ? "Preparing…" : "⬇️ Download Shift Report"}
+                    </button>
                     <button
                       className="btn secondary"
                       disabled={downloadingId === s.id}

@@ -236,6 +236,26 @@ export const kitchenStockMovements = pgTable("kitchen_stock_movements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const stockSubmissions = pgTable("stock_submissions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  department: text("department").notNull(), // bar | kitchen
+  branchId: uuid("branch_id").notNull(),
+  itemId: uuid("item_id").notNull(),
+  itemName: text("item_name").notNull(),
+  unit: text("unit").notNull().default("units"),
+  quantity: numeric("quantity").notNull(),
+  note: text("note"),
+  requestKey: text("request_key").notNull().unique(),
+  submittedById: uuid("submitted_by_id").notNull(),
+  submittedByName: text("submitted_by_name").notNull(),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+  status: text("status").notNull().default("pending"), // pending | accepted
+  acceptedById: uuid("accepted_by_id"),
+  acceptedByName: text("accepted_by_name"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedShiftId: uuid("accepted_shift_id"),
+});
+
 export const kitchenShifts = pgTable("kitchen_shifts", {
   id: uuid("id").primaryKey().defaultRandom(),
   chefId: uuid("chef_id").notNull(),
@@ -546,6 +566,7 @@ export type UpdateReceptionist = z.infer<typeof updateReceptionistSchema>;
 export type UpdateHotelSettings = z.infer<typeof updateHotelSettingsSchema>;
 export type KitchenInventoryItem = typeof kitchenInventory.$inferSelect;
 export type KitchenStockMovement = typeof kitchenStockMovements.$inferSelect;
+export type StockSubmission = typeof stockSubmissions.$inferSelect;
 export type KitchenShift = typeof kitchenShifts.$inferSelect;
 export type KitchenOrder = typeof kitchenOrders.$inferSelect;
 export type KitchenOrderItem = typeof kitchenOrderItems.$inferSelect;

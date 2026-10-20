@@ -230,6 +230,26 @@ export type KitchenInventoryItem = {
   status: string; lastUpdated: string; createdAt: string;
 };
 
+export type StockSubmission = {
+  id: string;
+  department: "bar" | "kitchen";
+  branchId: string;
+  itemId: string;
+  itemName: string;
+  unit: string;
+  quantity: string;
+  note: string | null;
+  requestKey: string;
+  submittedById: string;
+  submittedByName: string;
+  submittedAt: string;
+  status: "pending" | "accepted";
+  acceptedById: string | null;
+  acceptedByName: string | null;
+  acceptedAt: string | null;
+  acceptedShiftId: string | null;
+};
+
 export type KitchenShift = {
   id: string; chefId: string; chefName: string; branchId: string;
   status: string; startTime: string; endTime?: string | null;
@@ -400,6 +420,7 @@ export const api = {
   getCurrentBarShift: () => request<BarShift | null>("/api/bar/shifts/current"),
   getBarShifts: () => request<BarShift[]>("/api/bar/shifts"),
   closeBarShift: (id: string) => request<BarShift>(`/api/bar/shifts/${id}/close`, { method: "POST", body: JSON.stringify({}) }),
+  getBarShiftReport: (id: string) => request<{ shift: BarShift; acceptedStock: StockSubmission[] }>(`/api/bar/shifts/${id}/report`),
 
   createBarSale: (data: { waiterName?: string; paymentMethod: string; items: { drinkId: string; quantity: number }[] }) =>
     request<{ sale: BarSale; items: BarSaleItem[] }>("/api/bar/sales", { method: "POST", body: JSON.stringify(data) }),
@@ -429,11 +450,31 @@ export const api = {
   deleteKitchenInventoryItem: (id: string) => request<{ ok: boolean }>(`/api/kitchen/inventory/${id}`, { method: "DELETE" }),
   recordKitchenStockMovement: (data: { itemId: string; type: string; quantity: number; note?: string }) =>
     request<{ ok: boolean }>("/api/kitchen/stock-movements", { method: "POST", body: JSON.stringify(data) }),
+  submitStock: (data: {
+    department: "bar" | "kitchen";
+    itemId: string;
+    branchId?: string;
+    quantity: number;
+    note?: string;
+    requestKey: string;
+  }) => request<StockSubmission>("/api/stock-submissions", { method: "POST", body: JSON.stringify(data) }),
+  getPendingStock: () => request<StockSubmission[]>("/api/stock-submissions/pending"),
+  acceptStock: (id: string) => request<StockSubmission>(`/api/stock-submissions/${id}/accept`, { method: "POST", body: JSON.stringify({}) }),
+  getStockSubmissions: (filters?: { from?: string; to?: string; department?: "bar" | "kitchen"; branchId?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.from) params.set("from", filters.from);
+    if (filters?.to) params.set("to", filters.to);
+    if (filters?.department) params.set("department", filters.department);
+    if (filters?.branchId) params.set("branchId", filters.branchId);
+    const qs = params.toString();
+    return request<StockSubmission[]>(`/api/stock-submissions${qs ? `?${qs}` : ""}`);
+  },
 
   getActiveKitchenShift: () => request<KitchenShift | null>("/api/kitchen/shifts/active"),
   startKitchenShift: () => request<KitchenShift>("/api/kitchen/shifts/start", { method: "POST", body: JSON.stringify({}) }),
   closeKitchenShift: (id: string, notes?: string) => request<KitchenShift>(`/api/kitchen/shifts/${id}/close`, { method: "POST", body: JSON.stringify({ notes }) }),
   getKitchenShifts: () => request<KitchenShift[]>("/api/kitchen/shifts"),
+  getKitchenShiftReport: (id: string) => request<{ shift: KitchenShift; acceptedStock: StockSubmission[] }>(`/api/kitchen/shifts/${id}/report`),
 
   getKitchenOrders: (status?: string) => request<(KitchenOrder & { items: KitchenOrderItem[] })[]>(`/api/kitchen/orders${status ? `?status=${status}` : ""}`),
   getFoodSalesByDateRange: (source: "reception" | "bar", from: string, to: string) =>

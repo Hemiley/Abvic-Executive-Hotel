@@ -17,6 +17,7 @@ import {
   barSaleItems,
   kitchenInventory,
   kitchenStockMovements,
+  stockSubmissions,
   kitchenShifts,
   kitchenOrders,
   kitchenOrderItems,
@@ -46,6 +47,7 @@ import {
   type BarSaleItem,
   type KitchenInventoryItem,
   type KitchenStockMovement,
+  type StockSubmission,
   type KitchenShift,
   type KitchenOrder,
   type KitchenOrderItem,
@@ -606,7 +608,7 @@ export const storage = {
     const [d] = await db.insert(barDrinks).values({
       ...data,
       sellingPrice: String(data.sellingPrice),
-      status: data.status ?? (data.quantityAvailable > 0 ? "available" : "out_of_stock"),
+      status: data.quantityAvailable > 0 ? "available" : "out_of_stock",
     }).returning();
     return d;
   },
@@ -615,13 +617,19 @@ export const storage = {
     quantityAvailable: number; lowStockThreshold: number; barcode: string;
     imageUrl: string; status: string;
   }>): Promise<BarDrink | undefined> {
-    const payload: any = { ...data, updatedAt: new Date() };
-    if (payload.sellingPrice !== undefined) payload.sellingPrice = String(payload.sellingPrice);
-    if (payload.quantityAvailable !== undefined) {
-      payload.status = payload.quantityAvailable > 0 ? "available" : "out_of_stock";
-    }
-    const [d] = await db.update(barDrinks).set(payload).where(eq(barDrinks.id, id)).returning();
-    return d;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(barDrinks).where(eq(barDrinks.id, id)).for("update");
+      if (!existing) return undefined;
+      const payload: any = { ...data, updatedAt: new Date() };
+      if (payload.sellingPrice !== undefined) payload.sellingPrice = String(payload.sellingPrice);
+      const nextQuantity = payload.quantityAvailable ?? existing.quantityAvailable;
+      if (nextQuantity > existing.quantityAvailable) {
+        throw Object.assign(new Error("Stock increases must be submitted for on-duty acceptance."), { statusCode: 400 });
+      }
+      payload.status = nextQuantity > 0 ? "available" : "out_of_stock";
+      const [updated] = await tx.update(barDrinks).set(payload).where(eq(barDrinks.id, id)).returning();
+      return updated;
+    });
   },
   async deleteBarDrink(id: string): Promise<boolean> {
     const result = await db.delete(barDrinks).where(eq(barDrinks.id, id)).returning();
@@ -815,7 +823,7 @@ export const storage = {
       stockReceived: String(data.stockReceived),
       minimumStock: String(data.minimumStock),
       purchaseCost: data.purchaseCost !== undefined ? String(data.purchaseCost) : undefined,
-      status: data.status ?? autoStatus,
+      status: autoStatus,
     }).returning();
     return item;
   },
@@ -825,9 +833,14 @@ export const storage = {
     expiryDate: string; status: string;
   }>): Promise<KitchenInventoryItem | undefined> {
     const payload: any = { ...data, lastUpdated: new Date() };
+    const existing = await this.getKitchenInventoryItem(id);
+    if (!existing || existing.status === "deleted") return undefined;
     if (payload.pricePerUnit !== undefined) payload.pricePerUnit = String(payload.pricePerUnit);
     if (payload.minimumStock !== undefined) payload.minimumStock = String(payload.minimumStock);
     if (payload.purchaseCost !== undefined) payload.purchaseCost = String(payload.purchaseCost);
+    const minimumStock = payload.minimumStock !== undefined ? Number(payload.minimumStock) : Number(existing.minimumStock);
+    const currentStock = Number(existing.currentStock);
+    payload.status = currentStock <= 0 ? "out_of_stock" : currentStock <= minimumStock ? "low_stock" : "available";
     const [updated] = await db.update(kitchenInventory).set(payload).where(eq(kitchenInventory.id, id)).returning();
     return updated;
   },
@@ -877,6 +890,174 @@ export const storage = {
     if (itemId) conditions.push(eq(kitchenStockMovements.itemId, itemId));
     const q = db.select().from(kitchenStockMovements);
     return conditions.length ? q.where(and(...conditions)).orderBy(desc(kitchenStockMovements.createdAt)) : q.orderBy(desc(kitchenStockMovements.createdAt));
+  },
+
+  // ── Stock submission and acceptance ─────────────────────────────────────────
+  async createStockSubmission(data: {
+    department: "bar" | "kitchen";
+    branchId: string;
+    itemId: string;
+    quantity: number;
+    note?: string;
+    requestKey: string;
+    submittedById: string;
+    submittedByName: string;
+  }): Promise<StockSubmission> {
+    const existingForKey = await db.select().from(stockSubmissions)
+      .where(eq(stockSubmissions.requestKey, data.requestKey)).limit(1);
+    if (existingForKey[0]) {
+      const existing = existingForKey[0];
+      if (existing.submittedById !== data.submittedById || existing.itemId !== data.itemId ||
+          existing.department !== data.department || Number(existing.quantity) !== data.quantity) {
+        throw Object.assign(new Error("This submission key was already used for different stock."), { statusCode: 409 });
+      }
+      return existing;
+    }
+
+    if (data.department === "bar") {
+      const [item] = await db.select().from(barDrinks)
+        .where(and(eq(barDrinks.id, data.itemId), eq(barDrinks.branchId, data.branchId))).limit(1);
+      if (!item) throw Object.assign(new Error("Bar item not found in this branch."), { statusCode: 404 });
+      const [submission] = await db.insert(stockSubmissions).values({
+        ...data,
+        itemName: item.name,
+        unit: "units",
+        quantity: String(data.quantity),
+      }).returning();
+      return submission;
+    }
+
+    const [item] = await db.select().from(kitchenInventory)
+      .where(and(eq(kitchenInventory.id, data.itemId), eq(kitchenInventory.branchId, data.branchId))).limit(1);
+    if (!item || item.status === "deleted") {
+      throw Object.assign(new Error("Kitchen item not found in this branch."), { statusCode: 404 });
+    }
+    const [submission] = await db.insert(stockSubmissions).values({
+      ...data,
+      itemName: item.name,
+      unit: item.unit,
+      quantity: String(data.quantity),
+    }).returning();
+    return submission;
+  },
+  async getPendingStockSubmissions(department: "bar" | "kitchen", branchId: string): Promise<StockSubmission[]> {
+    return db.select().from(stockSubmissions).where(and(
+      eq(stockSubmissions.department, department),
+      eq(stockSubmissions.branchId, branchId),
+      eq(stockSubmissions.status, "pending"),
+    )).orderBy(stockSubmissions.submittedAt);
+  },
+  async acceptStockSubmission(data: {
+    id: string;
+    department: "bar" | "kitchen";
+    acceptedById: string;
+    acceptedByName: string;
+    shiftId: string;
+  }): Promise<StockSubmission> {
+    return db.transaction(async (tx) => {
+      let shiftBranchId: string | undefined;
+      if (data.department === "bar") {
+        const [shift] = await tx.select().from(barShifts)
+          .where(and(
+            eq(barShifts.id, data.shiftId),
+            eq(barShifts.barAttendantId, data.acceptedById),
+            eq(barShifts.status, "active"),
+          )).for("update");
+        if (!shift) throw Object.assign(new Error("An active Bar shift is required to accept stock."), { statusCode: 409 });
+        shiftBranchId = shift.branchId;
+      } else {
+        const [shift] = await tx.select().from(kitchenShifts)
+          .where(and(
+            eq(kitchenShifts.id, data.shiftId),
+            eq(kitchenShifts.chefId, data.acceptedById),
+            eq(kitchenShifts.status, "active"),
+          )).for("update");
+        if (!shift) throw Object.assign(new Error("An active Kitchen shift is required to accept stock."), { statusCode: 409 });
+        shiftBranchId = shift.branchId;
+      }
+
+      const [submission] = await tx.select().from(stockSubmissions)
+        .where(eq(stockSubmissions.id, data.id)).for("update");
+      if (!submission) throw Object.assign(new Error("Stock submission not found."), { statusCode: 404 });
+      if (submission.department !== data.department) {
+        throw Object.assign(new Error("This stock belongs to a different department."), { statusCode: 403 });
+      }
+      if (submission.status !== "pending") {
+        throw Object.assign(new Error("This stock has already been accepted."), { statusCode: 409 });
+      }
+      if (submission.branchId !== shiftBranchId) {
+        throw Object.assign(new Error("Stock submission and active shift must belong to the same branch."), { statusCode: 403 });
+      }
+
+      const quantity = Number(submission.quantity);
+      if (data.department === "bar") {
+        const [item] = await tx.select().from(barDrinks)
+          .where(and(eq(barDrinks.id, submission.itemId), eq(barDrinks.branchId, submission.branchId))).for("update");
+        if (!item) throw Object.assign(new Error("The submitted bar item no longer exists."), { statusCode: 409 });
+        const newQuantity = item.quantityAvailable + quantity;
+        await tx.update(barDrinks).set({
+          quantityAvailable: newQuantity,
+          status: newQuantity > 0 ? "available" : "out_of_stock",
+          updatedAt: new Date(),
+        }).where(eq(barDrinks.id, item.id));
+      } else {
+        const [item] = await tx.select().from(kitchenInventory)
+          .where(and(eq(kitchenInventory.id, submission.itemId), eq(kitchenInventory.branchId, submission.branchId))).for("update");
+        if (!item || item.status === "deleted") {
+          throw Object.assign(new Error("The submitted kitchen item no longer exists."), { statusCode: 409 });
+        }
+        const currentStock = Number(item.currentStock) + quantity;
+        const stockReceived = Number(item.stockReceived) + quantity;
+        const status = currentStock <= 0 ? "out_of_stock" : currentStock <= Number(item.minimumStock) ? "low_stock" : "available";
+        await tx.update(kitchenInventory).set({
+          currentStock: String(currentStock),
+          stockReceived: String(stockReceived),
+          status,
+          lastUpdated: new Date(),
+        }).where(eq(kitchenInventory.id, item.id));
+        await tx.insert(kitchenStockMovements).values({
+          itemId: item.id,
+          itemName: item.name,
+          branchId: item.branchId,
+          type: "received",
+          quantity: String(quantity),
+          note: submission.note,
+          staffId: data.acceptedById,
+          staffName: data.acceptedByName,
+        });
+      }
+
+      const [accepted] = await tx.update(stockSubmissions).set({
+        status: "accepted",
+        acceptedById: data.acceptedById,
+        acceptedByName: data.acceptedByName,
+        acceptedAt: new Date(),
+        acceptedShiftId: data.shiftId,
+      }).where(and(eq(stockSubmissions.id, data.id), eq(stockSubmissions.status, "pending"))).returning();
+      if (!accepted) throw Object.assign(new Error("This stock has already been accepted."), { statusCode: 409 });
+      return accepted;
+    });
+  },
+  async getStockSubmissions(filters: {
+    branchId?: string;
+    department?: "bar" | "kitchen";
+    from?: Date;
+    to?: Date;
+  } = {}): Promise<StockSubmission[]> {
+    const conditions: any[] = [];
+    if (filters.branchId) conditions.push(eq(stockSubmissions.branchId, filters.branchId));
+    if (filters.department) conditions.push(eq(stockSubmissions.department, filters.department));
+    if (filters.from) conditions.push(gte(stockSubmissions.submittedAt, filters.from));
+    if (filters.to) conditions.push(lte(stockSubmissions.submittedAt, filters.to));
+    const query = db.select().from(stockSubmissions);
+    return (conditions.length ? query.where(and(...conditions)) : query)
+      .orderBy(desc(stockSubmissions.submittedAt));
+  },
+  async getAcceptedStockForShift(shiftId: string): Promise<StockSubmission[]> {
+    return db.select().from(stockSubmissions).where(and(
+      eq(stockSubmissions.acceptedShiftId, shiftId),
+      eq(stockSubmissions.status, "accepted"),
+    )).orderBy(stockSubmissions.acceptedAt);
   },
 
   // ── Kitchen Shifts ───────────────────────────────────────────────────────────

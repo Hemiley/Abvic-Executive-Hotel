@@ -43,6 +43,11 @@ function scopeBranchId(req: Request): string | undefined {
   return req.session.branchId || undefined;
 }
 
+function routeParam(req: Request, name: string): string {
+  const value = req.params[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function requireBarAccess(req: Request, res: Response, next: NextFunction) {
   if (!req.session.receptionistId) return res.status(401).json({ message: "Not authenticated" });
   storage.getReceptionistById(req.session.receptionistId).then((user) => {
@@ -955,6 +960,111 @@ export function registerRoutes(app: Express) {
     res.send(header + rows);
   });
 
+  // ── Stock receipt workflow ─────────────────────────────────────────────────
+  app.get("/api/stock-submissions/pending", requireAuth, async (req, res) => {
+    const role = req.session.role;
+    const department = role === "bar_attendant" ? "bar" : role === "chef" ? "kitchen" : null;
+    if (!department) return res.status(403).json({ message: "Only on-duty Bar Attendants and Chefs can view stock awaiting acceptance." });
+    const branchId = req.session.branchId;
+    if (!branchId) return res.status(400).json({ message: "Branch not set on session." });
+    res.json(await storage.getPendingStockSubmissions(department, branchId));
+  });
+
+  app.post("/api/stock-submissions", requireAuth, async (req, res) => {
+    if (!["admin", "supervisor"].includes(req.session.role || "")) {
+      return res.status(403).json({ message: "Only Super Admins and Supervisors can submit stock." });
+    }
+    const { department, itemId, quantity, note, requestKey } = req.body ?? {};
+    const parsedQuantity = Number(quantity);
+    if ((department !== "bar" && department !== "kitchen") || typeof itemId !== "string" ||
+        !Number.isFinite(parsedQuantity) || parsedQuantity <= 0 ||
+        (department === "bar" && !Number.isInteger(parsedQuantity)) ||
+        typeof requestKey !== "string" || !requestKey.trim()) {
+      return res.status(400).json({ message: "A department, item, positive quantity, and unique submission key are required." });
+    }
+    const branchId = req.session.role === "admin"
+      ? (typeof req.body.branchId === "string" ? req.body.branchId : "")
+      : (req.session.branchId || "");
+    if (!branchId) return res.status(400).json({ message: "Select a branch for this stock submission." });
+    try {
+      const submission = await storage.createStockSubmission({
+        department,
+        branchId,
+        itemId,
+        quantity: parsedQuantity,
+        note: typeof note === "string" ? note.trim() || undefined : undefined,
+        requestKey: requestKey.trim(),
+        submittedById: req.session.receptionistId!,
+        submittedByName: req.session.receptionistName!,
+      });
+      await storage.logAction({
+        receptionistId: req.session.receptionistId,
+        receptionistName: req.session.receptionistName,
+        action: "stock_submitted",
+        details: `${department} stock submitted: ${parsedQuantity} ${submission.unit} of ${submission.itemName}`,
+      });
+      return res.status(201).json(submission);
+    } catch (error: any) {
+      if (error?.code === "23505") {
+        return res.status(409).json({ message: "An identical stock submission is already pending for this item." });
+      }
+      if (error?.statusCode) return res.status(error.statusCode).json({ message: error.message });
+      throw error;
+    }
+  });
+
+  app.post("/api/stock-submissions/:id/accept", requireAuth, async (req, res) => {
+    const role = req.session.role;
+    const department = role === "bar_attendant" ? "bar" : role === "chef" ? "kitchen" : null;
+    if (!department) return res.status(403).json({ message: "Only Bar Attendants and Chefs can accept stock." });
+    if (!req.session.receptionistId || !req.session.receptionistName) {
+      return res.status(401).json({ message: "Not authenticated." });
+    }
+
+    const shift = department === "bar"
+      ? await storage.getActiveBarShiftForAttendant(req.session.receptionistId)
+      : await storage.getActiveKitchenShift(req.session.receptionistId);
+    if (!shift || shift.branchId !== req.session.branchId) {
+      return res.status(409).json({ message: `Start an active ${department === "bar" ? "Bar" : "Kitchen"} shift in your assigned branch before accepting stock.` });
+    }
+
+    const accepted = await storage.acceptStockSubmission({
+      id: routeParam(req, "id"),
+      department,
+      acceptedById: req.session.receptionistId,
+      acceptedByName: req.session.receptionistName,
+      shiftId: shift.id,
+    });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "stock_submission_accepted",
+      details: `${accepted.department} stock accepted: ${accepted.quantity} ${accepted.unit} of ${accepted.itemName}`,
+    });
+    res.json(accepted);
+  });
+
+  app.get("/api/stock-submissions", requireAuth, async (req, res) => {
+    if (!["admin", "supervisor"].includes(req.session.role || "")) {
+      return res.status(403).json({ message: "Only Super Admins and Supervisors can view stock submission reports." });
+    }
+    const range = parseReportDateRange(req);
+    if (range.error) return res.status(400).json({ message: range.error });
+    const branchId = req.session.role === "admin"
+      ? (typeof req.query.branchId === "string" && req.query.branchId ? req.query.branchId : undefined)
+      : scopeBranchId(req);
+    const department = typeof req.query.department === "string" ? req.query.department : undefined;
+    if (department && department !== "bar" && department !== "kitchen") {
+      return res.status(400).json({ message: "Department must be bar or kitchen." });
+    }
+    res.json(await storage.getStockSubmissions({
+      branchId,
+      department: department as "bar" | "kitchen" | undefined,
+      from: range.from,
+      to: range.to,
+    }));
+  });
+
   void nightsBetween;
 
   // ── Bar Management Routes ──────────────────────────────────────────────────
@@ -974,6 +1084,9 @@ export function registerRoutes(app: Express) {
     if (req.session.role !== "admin") body.branchId = req.session.branchId;
     const parsed = insertBarDrinkSchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
+    if (parsed.data.quantityAvailable > 0) {
+      return res.status(400).json({ message: "Create the drink with zero stock, then submit the stock for on-duty acceptance." });
+    }
     const drink = await storage.createBarDrink(parsed.data);
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_created", details: `${drink.name} added to bar inventory` });
     res.status(201).json(drink);
@@ -982,14 +1095,37 @@ export function registerRoutes(app: Express) {
   app.patch("/api/bar/drinks/:id", requireBarManager, async (req, res) => {
     const parsed = updateBarDrinkSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
-    const updated = await storage.updateBarDrink(req.params.id, parsed.data);
+    const id = routeParam(req, "id");
+    const existing = await storage.getBarDrinkById(id);
+    if (!existing) return res.status(404).json({ message: "Drink not found" });
+    if (req.session.role !== "admin" && existing.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This drink belongs to a different branch." });
+    }
+    let updated: Awaited<ReturnType<typeof storage.updateBarDrink>>;
+    try {
+      updated = await storage.updateBarDrink(id, parsed.data);
+    } catch (error: any) {
+      if (error?.statusCode === 400) return res.status(400).json({ message: error.message });
+      throw error;
+    }
     if (!updated) return res.status(404).json({ message: "Drink not found" });
-    await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_updated", details: `${updated.name} updated` });
+    await storage.logAction({
+      receptionistId: req.session.receptionistId,
+      receptionistName: req.session.receptionistName,
+      action: "bar_drink_updated",
+      details: `${updated.name} updated${parsed.data.quantityAvailable !== undefined ? `; stock corrected down from ${existing.quantityAvailable} to ${updated.quantityAvailable}` : ""}`,
+    });
     res.json(updated);
   });
 
   app.delete("/api/bar/drinks/:id", requireBarManager, async (req, res) => {
-    const deleted = await storage.deleteBarDrink(req.params.id);
+    const id = routeParam(req, "id");
+    const existing = await storage.getBarDrinkById(id);
+    if (!existing) return res.status(404).json({ message: "Drink not found" });
+    if (req.session.role !== "admin" && existing.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This drink belongs to a different branch." });
+    }
+    const deleted = await storage.deleteBarDrink(id);
     if (!deleted) return res.status(404).json({ message: "Drink not found" });
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "bar_drink_deleted", details: `Drink ID ${req.params.id} removed` });
     res.json({ ok: true });
@@ -1050,6 +1186,19 @@ export function registerRoutes(app: Express) {
       return res.json(all.filter(s => s.barAttendantId === req.session.receptionistId));
     }
     res.json(all);
+  });
+
+  app.get("/api/bar/shifts/:id/report", requireBarAccess, async (req, res) => {
+    const shift = await storage.getBarShiftById(routeParam(req, "id"));
+    if (!shift) return res.status(404).json({ message: "Bar shift not found." });
+    if (req.session.role === "bar_attendant" && shift.barAttendantId !== req.session.receptionistId) {
+      return res.status(403).json({ message: "You can only view your own shift report." });
+    }
+    if (req.session.role === "supervisor" && shift.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This shift belongs to a different branch." });
+    }
+    const acceptedStock = await storage.getAcceptedStockForShift(shift.id);
+    res.json({ shift, acceptedStock });
   });
 
   app.post("/api/bar/shifts/:id/close", requireBarAccess, async (req, res) => {
@@ -1211,6 +1360,15 @@ export function registerRoutes(app: Express) {
     }).catch(next);
   }
 
+  function requireKitchenManager(req: Request, res: Response, next: NextFunction) {
+    requireKitchenAccess(req, res, () => {
+      if (!["admin", "supervisor"].includes(req.session.role || "")) {
+        return res.status(403).json({ message: "Admin or supervisor access required." });
+      }
+      next();
+    });
+  }
+
   // Public read-only menu endpoint — any authenticated user can view available kitchen items + prices
   app.get("/api/kitchen/menu", requireAuth, async (req, res) => {
     const branchId = req.session.role === "admin"
@@ -1228,11 +1386,19 @@ export function registerRoutes(app: Express) {
     res.json(await storage.getKitchenInventory(branchId));
   });
 
-  app.post("/api/kitchen/inventory", requireAdmin, async (req, res) => {
+  app.post("/api/kitchen/inventory", requireKitchenManager, async (req, res) => {
     const body = { ...req.body };
+    if (Number(body.openingStock || 0) > 0 || Number(body.stockReceived || 0) > 0) {
+      return res.status(400).json({ message: "Create the item with zero stock, then submit stock for on-duty acceptance." });
+    }
+    if (req.session.role !== "admin") body.branchId = req.session.branchId;
     const parsed = insertKitchenInventorySchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
-    const item = await storage.createKitchenInventoryItem(parsed.data as any);
+    const item = await storage.createKitchenInventoryItem({
+      ...parsed.data,
+      openingStock: 0,
+      stockReceived: 0,
+    } as any);
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_item_created", details: `${item.name} added to kitchen inventory` });
     res.status(201).json(item);
   });
@@ -1240,19 +1406,28 @@ export function registerRoutes(app: Express) {
   app.patch("/api/kitchen/inventory/:id", requireKitchenAccess, async (req, res) => {
     const parsed = updateKitchenInventorySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid data" });
-    const updated = await storage.updateKitchenInventoryItem(req.params.id, parsed.data as any);
+    const id = routeParam(req, "id");
+    const existing = await storage.getKitchenInventoryItem(id);
+    if (!existing || existing.status === "deleted") return res.status(404).json({ message: "Item not found" });
+    if (req.session.role !== "admin" && existing.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This item belongs to a different branch." });
+    }
+    const updated = await storage.updateKitchenInventoryItem(id, parsed.data as any);
     if (!updated) return res.status(404).json({ message: "Item not found" });
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_item_updated", details: `${updated.name} updated` });
     res.json(updated);
   });
 
-  app.delete("/api/kitchen/inventory/:id", requireAdmin, async (req, res) => {
+  app.delete("/api/kitchen/inventory/:id", requireKitchenManager, async (req, res) => {
     const inventoryItemId = typeof req.params.id === "string" ? req.params.id : req.params.id[0];
     if (!inventoryItemId) return res.status(400).json({ message: "Invalid kitchen inventory item id" });
 
     const existing = await storage.getKitchenInventoryItem(inventoryItemId);
     if (!existing || existing.status === "deleted") {
       return res.status(404).json({ message: "Kitchen inventory item not found" });
+    }
+    if (req.session.role !== "admin" && existing.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This item belongs to a different branch." });
     }
 
     const deleted = await storage.deleteKitchenInventoryItem(existing.id);
@@ -1270,9 +1445,28 @@ export function registerRoutes(app: Express) {
   // Kitchen Stock Movements
   app.post("/api/kitchen/stock-movements", requireKitchenAccess, async (req, res) => {
     const { itemId, type, quantity, note } = req.body;
-    if (!itemId || !type || !quantity) return res.status(400).json({ message: "itemId, type, and quantity required" });
+    const parsedQuantity = Number(quantity);
+    if (!itemId || !type || !Number.isFinite(parsedQuantity) ||
+        (type === "adjustment" ? parsedQuantity < 0 : parsedQuantity <= 0)) {
+      return res.status(400).json({ message: "A valid item, movement type, and quantity are required." });
+    }
+    if (type === "received") {
+      return res.status(400).json({ message: "Stock receipts must be submitted and accepted by the on-duty Chef." });
+    }
+    if (!["used", "waste", "adjustment"].includes(type)) {
+      return res.status(400).json({ message: "Unsupported stock movement type." });
+    }
+    const item = await storage.getKitchenInventoryItem(itemId);
+    if (!item || item.status === "deleted") return res.status(404).json({ message: "Kitchen item not found." });
+    if (req.session.role !== "admin" && item.branchId !== req.session.branchId) {
+      return res.status(403).json({ message: "This item belongs to a different branch." });
+    }
+    if (type === "adjustment" && ["admin", "supervisor"].includes(req.session.role || "") &&
+        parsedQuantity > Number(item.currentStock)) {
+      return res.status(400).json({ message: "Stock increases must be submitted for on-duty acceptance." });
+    }
     await storage.recordKitchenStockMovement({
-      itemId, type, quantity: Number(quantity), note,
+      itemId, type, quantity: parsedQuantity, note,
       staffId: req.session.receptionistId,
       staffName: req.session.receptionistName,
     });
@@ -1307,7 +1501,15 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/kitchen/shifts/:id/close", requireKitchenAccess, async (req, res) => {
     const { notes } = req.body;
-    const shift = await storage.closeKitchenShift(req.params.id, notes);
+    const id = routeParam(req, "id");
+    const shifts = await storage.getKitchenShifts(req.session.role === "admin" ? undefined : scopeBranchId(req));
+    const existing = shifts.find((candidate) => candidate.id === id);
+    if (!existing) return res.status(404).json({ message: "Kitchen shift not found." });
+    if (req.session.role === "chef" && existing.chefId !== req.session.receptionistId) {
+      return res.status(403).json({ message: "You can only close your own shift." });
+    }
+    if (existing.status !== "active") return res.status(409).json({ message: "Shift already closed." });
+    const shift = await storage.closeKitchenShift(id, notes);
     await storage.logAction({ receptionistId: req.session.receptionistId, receptionistName: req.session.receptionistName, action: "kitchen_shift_closed", details: "Kitchen shift closed" });
     res.json(shift);
   });
@@ -1315,6 +1517,17 @@ export function registerRoutes(app: Express) {
   app.get("/api/kitchen/shifts", requireKitchenAccess, async (req, res) => {
     const branchId = req.session.role === "admin" ? undefined : scopeBranchId(req);
     res.json(await storage.getKitchenShifts(branchId));
+  });
+
+  app.get("/api/kitchen/shifts/:id/report", requireKitchenAccess, async (req, res) => {
+    const shifts = await storage.getKitchenShifts(req.session.role === "admin" ? undefined : scopeBranchId(req));
+    const shift = shifts.find((candidate) => candidate.id === req.params.id);
+    if (!shift) return res.status(404).json({ message: "Kitchen shift not found." });
+    if (req.session.role === "chef" && shift.chefId !== req.session.receptionistId) {
+      return res.status(403).json({ message: "You can only view your own shift report." });
+    }
+    const acceptedStock = await storage.getAcceptedStockForShift(shift.id);
+    res.json({ shift, acceptedStock });
   });
 
   // Kitchen Orders

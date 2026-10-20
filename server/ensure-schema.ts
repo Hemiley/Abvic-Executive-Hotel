@@ -253,6 +253,35 @@ export async function ensureSchema(): Promise<void> {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS stock_submissions (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        department          TEXT NOT NULL,
+        branch_id           UUID NOT NULL,
+        item_id             UUID NOT NULL,
+        item_name           TEXT NOT NULL,
+        unit                TEXT NOT NULL DEFAULT 'units',
+        quantity            NUMERIC NOT NULL CHECK (quantity > 0),
+        note                TEXT,
+        request_key         TEXT NOT NULL UNIQUE,
+        submitted_by_id     UUID NOT NULL,
+        submitted_by_name   TEXT NOT NULL,
+        submitted_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+        status              TEXT NOT NULL DEFAULT 'pending',
+        accepted_by_id      UUID,
+        accepted_by_name    TEXT,
+        accepted_at         TIMESTAMP,
+        accepted_shift_id   UUID
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS stock_submissions_pending_duplicate_idx
+        ON stock_submissions (department, branch_id, item_id, submitted_by_id, quantity)
+        WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS stock_submissions_branch_submitted_idx
+        ON stock_submissions (branch_id, submitted_at DESC);
+      CREATE INDEX IF NOT EXISTS stock_submissions_accepted_shift_idx
+        ON stock_submissions (accepted_shift_id, accepted_at DESC)
+        WHERE status = 'accepted';
+
       CREATE TABLE IF NOT EXISTS kitchen_shifts (
         id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         chef_id                 UUID NOT NULL,

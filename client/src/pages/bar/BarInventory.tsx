@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type BarDrink, type Branch } from "../../lib/api";
+import { api, type BarDrink, type Branch, type StockSubmission, type BarShift } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
 const CATEGORIES = ["Beer", "Wine", "Spirit", "Soft Drink", "Water", "Energy Drink", "Other"];
@@ -29,6 +29,12 @@ export default function BarInventory() {
   const [showNew, setShowNew] = useState(false);
   const [editing, setEditing] = useState<BarDrink | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BarDrink | null>(null);
+  const [stockTarget, setStockTarget] = useState<BarDrink | null>(null);
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [stockNote, setStockNote] = useState("");
+  const [pendingStock, setPendingStock] = useState<StockSubmission[]>([]);
+  const [activeShift, setActiveShift] = useState<BarShift | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -39,9 +45,18 @@ export default function BarInventory() {
     api.getBarDrinks(isAdmin ? branch : undefined).then(setDrinks).catch(e => setError(e.message));
     if (isAdmin) api.getBranches().then(setBranches).catch(() => {});
     else setForm(f => ({ ...f, branchId: user?.branchId || "" }));
+    if (user?.role === "bar_attendant") {
+      api.getPendingStock().then(setPendingStock).catch(e => setError(e.message));
+      api.getCurrentBarShift().then(setActiveShift).catch(() => setActiveShift(null));
+    }
   }
 
-  useEffect(() => { load(filterBranch || undefined); }, [filterBranch]);
+  useEffect(() => {
+    load(filterBranch || undefined);
+    if (user?.role !== "bar_attendant") return;
+    const refresh = setInterval(() => load(filterBranch || undefined), 15000);
+    return () => clearInterval(refresh);
+  }, [filterBranch, user?.role]);
 
   const filtered = drinks.filter(d => {
     const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) || (d.brand || "").toLowerCase().includes(search.toLowerCase());
@@ -56,7 +71,7 @@ export default function BarInventory() {
       await api.createBarDrink({
         ...form,
         sellingPrice: Number(form.sellingPrice),
-        quantityAvailable: Number(form.quantityAvailable),
+        quantityAvailable: 0,
         lowStockThreshold: Number(form.lowStockThreshold),
         brand: form.brand || undefined,
         barcode: form.barcode || undefined,
@@ -89,6 +104,37 @@ export default function BarInventory() {
       load();
     } catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
+  }
+
+  async function handleSubmitStock(e: React.FormEvent) {
+    e.preventDefault();
+    if (!stockTarget) return;
+    setError(""); setSaving(true);
+    try {
+      await api.submitStock({
+        department: "bar",
+        itemId: stockTarget.id,
+        branchId: stockTarget.branchId,
+        quantity: Number(stockQuantity),
+        note: stockNote.trim() || undefined,
+        requestKey: crypto.randomUUID(),
+      });
+      setStockTarget(null);
+      setStockQuantity("");
+      setStockNote("");
+      load(filterBranch || undefined);
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleAcceptStock(submission: StockSubmission) {
+    setError(""); setAcceptingId(submission.id);
+    try {
+      await api.acceptStock(submission.id);
+      setPendingStock(items => items.filter(item => item.id !== submission.id));
+      load(filterBranch || undefined);
+    } catch (e: any) { setError(e.message); }
+    finally { setAcceptingId(null); }
   }
 
   async function handleDelete() {
@@ -148,6 +194,38 @@ export default function BarInventory() {
 
       {error && <p className="error-text" style={{ marginBottom: 12 }}>{error}</p>}
 
+      {user?.role === "bar_attendant" && (
+        <section className="glass" style={{ borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Stock Awaiting Acceptance</h2>
+              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "0.82rem" }}>
+                {activeShift ? `Accepted stock will be recorded on your active shift.` : "Start a Bar shift before accepting stock."}
+              </p>
+            </div>
+            <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{pendingStock.length} pending</span>
+          </div>
+          {pendingStock.length === 0 ? <p style={{ color: "var(--muted)", margin: 0 }}>No stock is waiting for acceptance.</p> : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {pendingStock.map(submission => (
+                <div key={submission.id} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 10 }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <strong>{submission.itemName}</strong>
+                    <div style={{ color: "var(--muted)", fontSize: ".82rem" }}>
+                      {submission.quantity} {submission.unit} · submitted by {submission.submittedByName} · {new Date(submission.submittedAt).toLocaleString()}
+                    </div>
+                    {submission.note && <div style={{ color: "var(--muted)", fontSize: ".82rem" }}>{submission.note}</div>}
+                  </div>
+                  <button className="btn" disabled={!activeShift || acceptingId === submission.id} onClick={() => handleAcceptStock(submission)}>
+                    {acceptingId === submission.id ? "Accepting…" : "Accept stock"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="glass" style={{ borderRadius: 12, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
           <thead>
@@ -180,9 +258,10 @@ export default function BarInventory() {
                     color: d.status === "available" ? "#4ade80" : "#f87171",
                   }}>{d.status === "available" ? "Available" : "Out of Stock"}</span>
                 </td>
-                {canManage && (
+              {canManage && (
                   <td style={{ padding: "10px 14px" }}>
                     <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn secondary" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={() => { setStockTarget(d); setStockQuantity(""); setStockNote(""); }}>Add Stock</button>
                       <button className="btn secondary" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={() => openEdit(d)}>Edit</button>
                       <button className="btn danger" style={{ padding: "4px 12px", fontSize: "0.8rem" }} onClick={() => setDeleteTarget(d)}>Delete</button>
                     </div>
@@ -201,13 +280,13 @@ export default function BarInventory() {
             <h2>Add New Drink</h2>
             <form onSubmit={handleCreate}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="field" style={{ gridColumn: "1/-1" }}>
+                {isAdmin && <div className="field" style={{ gridColumn: "1/-1" }}>
                   <label>Branch</label>
                   <select value={form.branchId} onChange={e => setForm(f => ({ ...f, branchId: e.target.value }))} required>
                     <option value="">Select branch</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
-                </div>
+                </div>}
                 <div className="field">
                   <label>Drink Name *</label>
                   <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
@@ -225,10 +304,6 @@ export default function BarInventory() {
                 <div className="field">
                   <label>Selling Price (₦) *</label>
                   <input type="number" min="0" value={form.sellingPrice} onChange={e => setForm(f => ({ ...f, sellingPrice: e.target.value }))} required />
-                </div>
-                <div className="field">
-                  <label>Quantity Available</label>
-                  <input type="number" min="0" value={form.quantityAvailable} onChange={e => setForm(f => ({ ...f, quantityAvailable: e.target.value }))} />
                 </div>
                 <div className="field">
                   <label>Low Stock Alert At</label>
@@ -279,8 +354,9 @@ export default function BarInventory() {
                   <input type="number" min="0" value={editForm.sellingPrice} onChange={e => setEditForm(f => ({ ...f, sellingPrice: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label>Quantity Available</label>
-                  <input type="number" min="0" value={editForm.quantityAvailable} onChange={e => setEditForm(f => ({ ...f, quantityAvailable: e.target.value }))} />
+                  <label>Active Stock (lower only)</label>
+                  <input type="number" min="0" max={editing.quantityAvailable} value={editForm.quantityAvailable} onChange={e => setEditForm(f => ({ ...f, quantityAvailable: e.target.value }))} />
+                  <small style={{ color: "var(--muted)" }}>To increase stock, submit it for acceptance.</small>
                 </div>
                 <div className="field">
                   <label>Low Stock Alert At</label>
@@ -306,6 +382,32 @@ export default function BarInventory() {
               <div className="modal-actions">
                 <button type="button" className="btn secondary" onClick={() => setEditing(null)}>Cancel</button>
                 <button type="submit" className="btn" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {stockTarget && (
+        <div className="modal-overlay" onClick={() => setStockTarget(null)}>
+          <div className="modal glass" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <h2>Submit Bar Stock</h2>
+            <p style={{ color: "var(--muted)", marginBottom: 16 }}>
+              {stockTarget.name} will remain pending until a Bar Attendant accepts it on an active shift.
+            </p>
+            <form onSubmit={handleSubmitStock}>
+              <div className="field">
+                <label>Quantity (whole units) *</label>
+                <input type="number" min="1" step="1" value={stockQuantity} onChange={e => setStockQuantity(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label>Note</label>
+                <input value={stockNote} onChange={e => setStockNote(e.target.value)} placeholder="Optional delivery or reference note" />
+              </div>
+              {error && <p className="error-text">{error}</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn secondary" onClick={() => setStockTarget(null)}>Cancel</button>
+                <button type="submit" className="btn" disabled={saving}>{saving ? "Submitting…" : "Submit for acceptance"}</button>
               </div>
             </form>
           </div>

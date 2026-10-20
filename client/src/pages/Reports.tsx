@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { api, type KitchenOrder, type KitchenOrderItem } from "../lib/api";
+import { api, type KitchenOrder, type KitchenOrderItem, type StockSubmission } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -41,6 +41,9 @@ export default function Reports() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [error, setError] = useState("");
+  const [stockRows, setStockRows] = useState<StockSubmission[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const [stockError, setStockError] = useState("");
 
   // Food sales
   const [foodDate, setFoodDate] = useState(todayStr());
@@ -55,6 +58,21 @@ export default function Reports() {
       .getReportsSummary({ from: fromDate || undefined, to: toDate || undefined })
       .then(setSummary)
       .catch((err) => setError(err.message || "Failed to load report"));
+  }, [fromDate, toDate, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const loadStock = () => {
+      setStockLoading(true);
+      setStockError("");
+      api.getStockSubmissions({ from: fromDate || undefined, to: toDate || undefined })
+        .then(setStockRows)
+        .catch(err => setStockError(err.message || "Failed to load stock submissions"))
+        .finally(() => setStockLoading(false));
+    };
+    loadStock();
+    const refresh = setInterval(loadStock, 30000);
+    return () => clearInterval(refresh);
   }, [fromDate, toDate, isAdmin]);
 
   useEffect(() => {
@@ -74,6 +92,24 @@ export default function Reports() {
     if (toDate) params.set("to", toDate);
     const qs = params.toString();
     window.open(`/api/reports/export.csv${qs ? `?${qs}` : ""}`, "_blank");
+  }
+
+  function exportStockCsv() {
+    const headers = ["Department", "Submitted By", "Item", "Quantity", "Submitted At", "Status", "Accepted By", "Accepted At", "Note"];
+    const rows = stockRows.map(item => [
+      item.department, item.submittedByName, item.itemName, `${item.quantity} ${item.unit}`,
+      new Date(item.submittedAt).toLocaleString("en-NG"), item.status,
+      item.acceptedByName || "", item.acceptedAt ? new Date(item.acceptedAt).toLocaleString("en-NG") : "", item.note || "",
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = `stock-submissions${fromDate ? `-${fromDate}` : ""}${toDate ? `-to-${toDate}` : ""}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
   }
 
   function exportFoodExcel() {
@@ -191,6 +227,51 @@ export default function Reports() {
               </div>
             ))}
           </div>
+
+          <section style={{ marginBottom: 36 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              <div>
+                <h2 style={{ margin: 0 }}>📦 Stock Submissions</h2>
+                <p className="page-sub" style={{ margin: "4px 0 0" }}>Submitted stock, current acceptance status, and the staff member who accepted it.</p>
+              </div>
+              {stockRows.length > 0 && <button className="btn secondary" onClick={exportStockCsv}>Download Stock CSV</button>}
+            </div>
+            {stockError && <p className="error-text">{stockError}</p>}
+            {stockLoading && <p style={{ color: "var(--muted)" }}>Loading stock submissions…</p>}
+            {!stockLoading && stockRows.length === 0 && !stockError && (
+              <div className="glass" style={{ borderRadius: 12, padding: 24, textAlign: "center", color: "var(--muted)" }}>No stock submissions in this date range.</div>
+            )}
+            {!stockLoading && stockRows.length > 0 && (
+              <div className="glass" style={{ borderRadius: 12, overflow: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".84rem", minWidth: 900 }}>
+                  <thead>
+                    <tr>
+                      {["Area", "Submitted By", "Item", "Quantity", "Submitted", "Status", "Accepted By", "Accepted At", "Note"].map(header => (
+                        <th key={header} style={{ padding: "10px 12px", textAlign: "left", background: "rgba(255,255,255,.05)", color: "var(--muted)", fontSize: ".72rem", textTransform: "uppercase" }}>{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockRows.map(item => (
+                      <tr key={item.id} style={{ borderTop: "1px solid rgba(255,255,255,.06)" }}>
+                        <td style={{ padding: "9px 12px", textTransform: "capitalize" }}>{item.department}</td>
+                        <td style={{ padding: "9px 12px", fontWeight: 600 }}>{item.submittedByName}</td>
+                        <td style={{ padding: "9px 12px" }}>{item.itemName}</td>
+                        <td style={{ padding: "9px 12px" }}>{item.quantity} {item.unit}</td>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>{new Date(item.submittedAt).toLocaleString("en-NG")}</td>
+                        <td style={{ padding: "9px 12px" }}>
+                          <span style={{ color: item.status === "accepted" ? "#4ade80" : "#f59e0b", fontWeight: 700, textTransform: "capitalize" }}>{item.status}</span>
+                        </td>
+                        <td style={{ padding: "9px 12px" }}>{item.acceptedByName || "—"}</td>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>{item.acceptedAt ? new Date(item.acceptedAt).toLocaleString("en-NG") : "—"}</td>
+                        <td style={{ padding: "9px 12px" }}>{item.note || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </>
       )}
 

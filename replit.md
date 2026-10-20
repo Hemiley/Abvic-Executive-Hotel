@@ -33,9 +33,9 @@ On first boot, `server/seed.ts` creates the `superadmin` and `receptionist` acco
 |---|---|
 | `admin` | Full system access — hotel + bar + kitchen + security/attendance |
 | `receptionist` | Hotel front-desk: bookings, rooms, shifts |
-| `supervisor` | Hotel front-desk + audit logs + bar + kitchen |
-| `bar_attendant` | Bar portal only: sales, inventory view, shifts |
-| `chef` | Kitchen portal only: orders, inventory, shifts |
+| `supervisor` | Hotel front-desk + audit logs + Bar and Kitchen inventory management |
+| `bar_attendant` | Bar portal: sales, inventory view, pending stock acceptance, shifts |
+| `chef` | Kitchen portal: orders, inventory, pending stock acceptance, shifts |
 | `security` | Security portal only: staff sign-in/sign-out |
 
 ## Key files
@@ -59,7 +59,7 @@ Admins can also access the bar portal via the sidebar link.
 
 - `/bar` — Dashboard with shift, stock, and sales overview
 - `/bar/sales` — POS terminal for recording sales and printing receipts
-- `/bar/inventory` — Drink stock management (admin: full CRUD; bar attendant: view)
+- `/bar/inventory` — Drink stock management (admin/supervisor: item CRUD and stock submissions; bar attendant: accept pending stock and view)
 - `/bar/waiters` — Waiter/waitress roster management
 - `/bar/reports` — Sales reports with PDF print, Excel, and CSV export
 - `/bar/shifts` — Bar shift history with printable shift summaries
@@ -77,6 +77,17 @@ Admins can also access the bar portal via the sidebar link.
 - `GET /api/bar/sales/:id` — Sale detail + items
 - `GET /api/bar/dashboard` — Attendant dashboard summary
 - `GET /api/bar/reports` — Aggregated sales report with date filtering
+
+## Stock Receipt and Acceptance
+
+- Admins and supervisors create or edit inventory items with no active starting stock. Stock receipts are recorded as submissions and stay pending until accepted by an on-duty Bar Attendant or Chef in the matching branch.
+- Acceptance requires the matching staff role and an active shift. The submission status, accepting staff member, timestamp, shift, active inventory quantity, and Kitchen stock movement are updated together in a database transaction.
+- Supervisors can manage both Bar and Kitchen inventory within their assigned branch. Stock increases cannot be applied by directly editing quantities; reductions/corrections remain available.
+- Admin and supervisor reports list each submission, submitter, item, quantity, submission time, acceptance status, and accepting staff member. Shift downloads include the stock accepted during that shift.
+- `GET /api/stock-submissions/pending` — Department-specific pending queue for the on-duty staff role
+- `POST /api/stock-submissions` — Submit Bar or Kitchen stock for acceptance
+- `POST /api/stock-submissions/:id/accept` — Accept a pending submission during an active matching shift
+- `GET /api/stock-submissions` — Branch-scoped admin/supervisor stock report
 
 ## Security Attendance Portal
 

@@ -22,6 +22,8 @@ const SUPERVISOR_BAR_NAV = [
   { to: "/bar/waiters", label: "Waiters", icon: "👤" },
   { to: "/bar/reports", label: "Reports", icon: "📊" },
   { to: "/bar/shifts", label: "Shift History", icon: "🕐" },
+  { to: "/kitchen/inventory", label: "Kitchen Inventory", icon: "🥩" },
+  { to: "/abvichoteldashboard", label: "← Hotel Dashboard", icon: "🏨" },
 ];
 
 const ADMIN_BAR_NAV = [
